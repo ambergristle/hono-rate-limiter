@@ -13,7 +13,8 @@ and that all fields are retrieved, there is likely little performance
 difference between HGETALL and HMGET.
 --]]
 
-local fields = redis.call("HGETALL", key)
+local bucket = redis.call("HGETALL", key)
+-- local bucket = redis.call("HMGET", key, "refilledAt", "tokens")
 
 --[[
 buckets are set to expire at time count would refill to max if no more
@@ -22,7 +23,7 @@ them when they aren't tracking anything minimizes memory footprint.
 --]]
 
 -- HGETALL returns an empty table if key does not exist
-if #fields == 0 then
+if #bucket == 0 then
 	local expiresInSeconds = cost * refillIntervalSeconds
   local count = max - cost
 	redis.call("HSET", key, "count", count, "refilled_at", now)
@@ -36,13 +37,21 @@ local count = 0
 local refilledAt = 0
 
 -- extract table values without assuming order
-for i = 1, #fields, 2 do
-	if fields[i] == "count" then
-		count = tonumber(fields[i + 1])
-	elseif fields[i] == "refilled_at" then
-		refilledAt = tonumber(fields[i + 1])
+for i = 1, #bucket, 2 do
+	if bucket[i] == "count" then
+		count = tonumber(bucket[i + 1])
+	elseif bucket[i] == "refilled_at" then
+		refilledAt = tonumber(bucket[i + 1])
 	end
 end
+
+-- if bucket[1] == false then
+--   refilledAt = now
+--   tokens = maxTokens
+-- else
+--   refilledAt = tonumber(bucket[1])
+--   tokens = tonumber(bucket[2])
+-- end
 
 -- how many tokens to add to count based on time since last request
 -- refill === elapsed intervals
