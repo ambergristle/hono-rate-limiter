@@ -1,0 +1,18 @@
+{
+	"name": "hono-rate-limiter",
+	"version": "0.0.0",
+	"author": "ambergristle",
+	"main": "index.js",
+	"dependencies": {
+		"hono": "4.7.4"
+	},
+	"description": "",
+	"keywords": [],
+	"license": "MIT",
+	"private": false,
+	"scripts": {
+		"lint:check": "biome check",
+		"lint:fix": "biome format --write && biome lint --write",
+		"test": "echo \"Error: no test specified\" && exit 1"
+	}
+}
