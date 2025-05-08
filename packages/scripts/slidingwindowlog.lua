@@ -1,7 +1,8 @@
-local key           = KEYS[1]           -- identifier including prefixes
-local limit         = tonumber(ARGV[1]) -- maximum number of requests per window
-local windowSeconds = tonumber(ARGV[2]) -- window size in seconds
-local now           = tonumber(ARGV[3]) -- current unix time in seconds
+local key              = KEYS[1]           -- identifier including prefixes
+local limit            = tonumber(ARGV[1]) -- maximum number of requests per window
+local windowSeconds    = tonumber(ARGV[2]) -- window size in seconds
+local expiresInSeconds = tonumber(ARGV[2])
+local now              = tonumber(ARGV[3]) -- current unix time in seconds
 
 local windowStart = now - windowSeconds
 
@@ -17,6 +18,6 @@ if nextCount > limit then
 
 -- add token with current timestamp to sorted set
 redis.call('ZADD', key, now, now)
-redis.call('EXPIRE', key, 10)
+redis.call('EXPIRE', key, expiresInSeconds)
 
 return {1, limit - nextCount}

@@ -1,6 +1,7 @@
 
 local key                   = KEYS[1]           -- identifier including prefixes
 local max                   = tonumber(ARGV[1]) -- maximum number of tokens
+-- do headers use seconds?
 local refillIntervalSeconds = tonumber(ARGV[2]) -- how often to increment token count
 local cost                  = tonumber(ARGV[3]) -- how many tokens to consume, default is 1
 -- there is no performant way to get current time within script
@@ -12,9 +13,7 @@ hashes store two fields (count and refill time). given their small size,
 and that all fields are retrieved, there is likely little performance
 difference between HGETALL and HMGET.
 --]]
-
-local bucket = redis.call("HGETALL", key)
--- local bucket = redis.call("HMGET", key, "refilledAt", "tokens")
+local bucket = redis.call("HMGET", key, "tokens", "refilledAt")
 
 --[[
 buckets are set to expire at time count would refill to max if no more
@@ -22,48 +21,34 @@ tokens are consumed. a full bucket is the same as no bucket, so deleting
 them when they aren't tracking anything minimizes memory footprint.
 --]]
 
--- HGETALL returns an empty table if key does not exist
-if #bucket == 0 then
+-- HMGET returns an array of false values if key unset
+if bucket[1] == false then
 	local expiresInSeconds = cost * refillIntervalSeconds
-  local count = max - cost
-	redis.call("HSET", key, "count", count, "refilled_at", now)
+  local intervalsRemaining = max - cost
+
+	redis.call("HSET", key, "count", intervalsRemaining, "refilled_at", now)
 	redis.call("EXPIRE", key, expiresInSeconds)
-	return {count, now + interval}
-end
 
+	return {intervalsRemaining, now + refillIntervalSeconds}
+end
 -- tokens are a unit of time
-
-local count = 0
-local refilledAt = 0
-
--- extract table values without assuming order
-for i = 1, #bucket, 2 do
-	if bucket[i] == "count" then
-		count = tonumber(bucket[i + 1])
-	elseif bucket[i] == "refilled_at" then
-		refilledAt = tonumber(bucket[i + 1])
-	end
-end
-
--- if bucket[1] == false then
---   refilledAt = now
---   tokens = maxTokens
--- else
---   refilledAt = tonumber(bucket[1])
---   tokens = tonumber(bucket[2])
--- end
+local intervalsRemaining = tonumber(bucket[1])
+local refilledAt = tonumber(bucket[2])
 
 -- how many tokens to add to count based on time since last request
--- refill === elapsed intervals
-local refill = math.floor((now - refilledAt) / refillIntervalSeconds)
-count = math.min(count + refill, max)
+local elapsedIntervals = math.floor((now - refilledAt) / refillIntervalSeconds)
+intervalsRemaining = math.min(intervalsRemaining + elapsedIntervals, max)
 -- tokens = math.min(maxTokens, tokens + numRefills * refillRate)
 
--- update refill time to include time since last request calculated by elapsed intervals
-refilledAt = refilledAt + refill * refillIntervalSeconds
+-- max * interval = measure of time in which max is expected to be consumed
 
+-- update refill time to include time since last request 
+-- calculated by elapsed intervals
+refilledAt = refilledAt + elapsedIntervals * refillIntervalSeconds
+
+-- check how -1 is consumed
 if count < cost then
-	return {count, refilledAt + interval}
+	return {0, count, refilledAt + refillIntervalSeconds}
 end
 
 -- only decrement cost if bucket has enough tokens
@@ -77,4 +62,4 @@ redis.call("EXPIRE", key, expiresInSeconds)
 -- PEXPIRE works the same as EXPIRE, but using milliseconds instead of seconds
 -- redis.call("PEXPIRE", key, expireAt)
 
-return {count, refilledAt + interval}
+return {count, refilledAt + refillIntervalSeconds}
