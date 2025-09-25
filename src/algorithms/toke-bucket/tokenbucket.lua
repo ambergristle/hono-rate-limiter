@@ -35,6 +35,7 @@ end
 local intervalsRemaining = tonumber(bucket[1])
 local refilledAt = tonumber(bucket[2])
 
+if now > refilledAt + refillIntervalSeconds then
 -- how many tokens to add to count based on time since last request
 local elapsedIntervals = math.floor((now - refilledAt) / refillIntervalSeconds)
 intervalsRemaining = math.min(intervalsRemaining + elapsedIntervals, max)
@@ -45,6 +46,7 @@ intervalsRemaining = math.min(intervalsRemaining + elapsedIntervals, max)
 -- update refill time to include time since last request 
 -- calculated by elapsed intervals
 refilledAt = refilledAt + elapsedIntervals * refillIntervalSeconds
+end
 
 -- check how -1 is consumed
 if count < cost then
