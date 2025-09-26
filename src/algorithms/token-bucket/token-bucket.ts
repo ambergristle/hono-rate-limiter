@@ -67,15 +67,11 @@ export class TokenBucket {
   }
 
   public async refund(identifier: string, value: number): Promise<{
-    limit: number;
     remaining: number;
-    // resetIn: number;
   }> {
     const remaining = await this.client.incrby(identifier, value);
     return {
-      limit: this.max,
       remaining,
-      // resetIn,
     };
   }
 

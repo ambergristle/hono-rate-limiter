@@ -1,23 +1,20 @@
-local key              = KEYS[1]           -- identifier including prefixes
-local limit            = tonumber(ARGV[1]) -- maximum number of requests per window
-local windowSeconds    = tonumber(ARGV[2]) -- window size in seconds
-local expiresInSeconds = tonumber(ARGV[2])
-local now              = tonumber(ARGV[3]) -- current unix time in seconds
+local key    = KEYS[1]
+local max    = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+-- local expiresIn = tonumber(ARGV[2])
+local now    = tonumber(ARGV[3])
 
-local windowStart = now - windowSeconds
+local windowStart = now - window
+redis.call("ZREMRANGEBYSCORE", key, "-inf", windowStart)
 
--- clear tokens before window start
-redis.call('ZREMRANGEBYSCORE', key, '-inf', windowStart)
-
--- get current token count (0 if key unset)
-local count = redis.call('ZCARD', key)
+local count = redis.call("ZCARD", key)
 local nextCount = count + 1
 
-if nextCount > limit then
-  return {0, limit - count}
+if nextCount > max then
+  return {0, max - count}
+end
 
--- add token with current timestamp to sorted set
-redis.call('ZADD', key, now, now)
-redis.call('EXPIRE', key, expiresInSeconds)
+redis.call("ZADD", key, now, now)
+redis.call("PEXPIRE", key, window)
 
-return {1, limit - nextCount}
+return {1, max - nextCount}

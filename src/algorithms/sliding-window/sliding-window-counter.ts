@@ -1,6 +1,9 @@
 import * as fs from 'fs';
 import type { Redis } from '@upstash/redis';
 
+type IncrementArgs = [string, string, string, string];
+type IncrementData = [number, number];
+
 const INCREMENT_SCRIPT = fs.readFileSync('./increment.lua', 'utf8');
 
 const RESET_SCRIPT = fs.readFileSync('./reset.lua', 'utf8');
@@ -10,7 +13,7 @@ type SlidingWindowCounterOptions = {
   window: number;
 }
 
-class SlidingWindowCounter {
+export class SlidingWindowCounter {
 
   private readonly client: Redis;
 
@@ -28,7 +31,12 @@ class SlidingWindowCounter {
     this.incrementScriptSha = this.client.scriptLoad(INCREMENT_SCRIPT);
   }
 
-  public async consume(identifier: string): Promise<void> {
+  public async consume(identifier: string, cost: number): Promise<{
+    success: boolean;
+    limit: number;
+    remaining: number;
+    resetIn: number;
+  }> {
     const now = Date.now();
 
     const currentWindow = Math.floor(now / this.window);
@@ -37,29 +45,37 @@ class SlidingWindowCounter {
     const previousWindow = currentWindow - 1;
     const previousKey = `${identifier}:${previousWindow}`;
 
-    const used = await this.client.evalsha<[string, string, string], number>(
+    const [success, remaining] = await this.client.evalsha<IncrementArgs, IncrementData>(
       await this.incrementScriptSha,
       [previousKey, currentKey],
       [
-        this.windowLimit.toString(),
-        now.toString(),
-        this.windowMilliseconds.toString(),
+        this.window.toString(),
+        this.max.toString(),
         cost.toString(),
+        now.toString()
       ],
     );
 
-    const success = used <= this.max;
-
     return {
-      success,
+      success: Boolean(success),
       limit: this.max,
-      remaining: success ? this.max - used : 0,
+      remaining,
       resetIn: (currentWindow + 1) * this.window,
     }
   }
 
-  public async refund(identifier: string, value: number): Promise<void> {
-    await this.client.decrby(currentKey, value);
+  public async refund(identifier: string, value: number): Promise<{
+    remaining: number;
+  }> {
+    const used = await this.client.evalsha<[string], number>(
+      await this.incrementScriptSha,
+      [identifier],
+      [value.toString()],
+    );
+
+    return {
+      remaining: this.max - used,
+    }
   }
 
   public async reset(identifier: string): Promise<void> {

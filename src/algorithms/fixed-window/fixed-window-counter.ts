@@ -59,15 +59,11 @@ export class FixedWindowCounter {
   }
 
   public async refund(identifier: string, value: number): Promise<{
-    limit: number;
     remaining: number;
-    // resetIn: number;
   }> {
     const used = await this.client.decrby(identifier, value);
     return {
-      limit: this.max,
       remaining: this.max - used,
-      // resetIn,
     };
   }
 
