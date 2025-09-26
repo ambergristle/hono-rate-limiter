@@ -13,7 +13,7 @@ export const rateLimiter = <
   prefix,
   // limiter,
   headerSpec = 'draft-8',
-
+  refundFailed,
   store,
 }: {
   name?: N,
@@ -21,15 +21,12 @@ export const rateLimiter = <
   prefix?: string;
   /** @default 'draft-8' */
   headerSpec?: 'draft-6' | 'draft-7' | 'draft-8';
+  refundFailed?: boolean;
   algorithm: any;
   store: (c: Context<E>) => MaybePromise<StoreAdapter> | StoreAdapter;
 }): MiddlewareHandler<{ Variables: { [key in N]: any } }> => {
 
   return async (c, next) => {
-
-    const _store = typeof store === 'function'
-      ? await store(c)
-      : store;
 
     const segments = [await generateKey(c as any)];
     if (prefix) {
@@ -38,13 +35,20 @@ export const rateLimiter = <
 
     const identifier = segments.join(':');
 
+    // random request id?
+    // cost?
+    let rateLimitInfo = await limiter.consume(identifier)
+
     await next();
 
-    if (c.error) {
-      console.error('error');
-    }
+    if (c.error && refundFailed) {
+      // if (consumed > 0 && refunded < consumed) {
+      //   await limiter.refund(key, consumed - refunded);
+      // }
 
-    const rateLimitInfo = {};
+      // cost?
+      rateLimitInfo = await limiter.refund(result.key);
+    }
 
     if (headerSpec) {
       setHeaders(c, headerSpec, {
