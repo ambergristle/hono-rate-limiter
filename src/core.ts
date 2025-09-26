@@ -1,8 +1,20 @@
 import type { Context, Env, MiddlewareHandler } from 'hono';
 import { setHeaders } from './headers';
 import { Algorithm } from './algorithms/types';
+import { MaybePromise } from './types';
 
-type MaybePromise<T> = T | Promise<T>;
+type RateLimiterOptions<E extends Env, N extends string> = {
+  name?: N,
+  generateKey: (c: Context<E>) => MaybePromise<string>;
+  prefix?: string;
+
+  algo: Algorithm | ((c: Context<E>) => MaybePromise<Algorithm>);
+  cost?: number;
+
+  /** @default 'draft-8' */
+  headerSpec?: 'draft-6' | 'draft-7' | 'draft-8';
+  refundFailed?: boolean;
+}
 
 export const rateLimiter = <
   E extends Env,
@@ -10,45 +22,31 @@ export const rateLimiter = <
 >({
   name = 'limiter' as N,
   generateKey,
-  prefix,
+  prefix = 'limit',
 
   algo,
+  cost = 1,
 
-  // limiter,
   headerSpec = 'draft-8',
   refundFailed,
-}: {
-  name?: N,
-  generateKey: (c: Context<E>) => MaybePromise<string>;
-  prefix?: string;
-
-  algo: Algorithm;
-
-  /** @default 'draft-8' */
-  headerSpec?: 'draft-6' | 'draft-7' | 'draft-8';
-  refundFailed?: boolean;
-}): MiddlewareHandler<{ Variables: { [key in N]: any } }> => {
+}: RateLimiterOptions<E, N>): MiddlewareHandler<{
+  Variables: { [key in N]: any }
+}> => {
 
   return async (c, next) => {
+    const identifier = `${prefix}:${await generateKey(c as any)}`;
 
-    const segments = [await generateKey(c as any)];
-    if (prefix) {
-      segments.unshift(prefix);
-    }
+    const limiter = typeof algo === 'function'
+      ? await algo(c as any)
+      : algo
 
-    const identifier = segments.join(':');
-
-    const limiter = algo
-
-    // random request id?
-    // cost?
-    let rateLimitInfo = await limiter.consume(identifier, cost)
+    const rateLimitInfo = await limiter.consume(identifier, cost)
 
     await next();
 
     if (c.error && refundFailed) {
-      // if (consumed > 0 && refunded < consumed) {
       const { remaining } = await limiter.refund(identifier, cost);
+      rateLimitInfo.remaining = remaining;
     }
 
     if (headerSpec) {
@@ -60,34 +58,3 @@ export const rateLimiter = <
     }
   }
 };
-
-// export const rateLimiter = <
-//   E extends Env = Env,
-//   P extends string = string,
-//   I extends Input = {}
-// >({
-//   id,
-//   cost,
-//   autoLimit,
-//   refundFailed,
-//   generateKey,
-// }: LimiterOptions<LimiterEnv<E>, P, I>): MiddlewareHandler<LimiterEnv<E>, P, I> => {
-//   return async (c, next) => {
-//     const identifier = `${id}:${await generateKey(c)}`;
-
-//     let consumed = 0;
-//     let refunded = 0;
-
-//     if (autoLimit) {
-//       // 
-//     }
-
-//     await next();
-
-//     if (c.error && refundFailed) {
-//       if (consumed > 0 && refunded < consumed) {
-//         // await limiter.refund(key, consumed - refunded);
-//       }
-//     }
-//   }
-// }

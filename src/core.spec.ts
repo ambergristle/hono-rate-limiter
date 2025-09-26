@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { rateLimiter } from './core';
 import { MemoryStore } from './store/memory-store';
+import { FixedWindowCounter } from './algorithms/fixed-window/fixed-window-counter';
 
 describe('configuration', () => {
 
@@ -33,8 +34,10 @@ describe('request handling', () => {
     app.use('/', rateLimiter<AuthEnv>({
       name: 'limiter',
       generateKey: (c) => c.var.auth.userId,
-      algorithm: FixedWindowCounter,
-      store: (c) => new MemoryStore(),
+      algo: new FixedWindowCounter(client, {
+        max: 100,
+        window: 60 * 60,
+      }),
     }));
 
     app.get('/', (c) => c.body(null, 200));
