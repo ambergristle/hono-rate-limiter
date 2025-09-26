@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import type { Redis } from '@upstash/redis';
+import { RateLimitInfo } from '../../types';
 
 type IncrementArgs = [string, string, string, string, string];
 type IncrementData = [number, number, number];
@@ -31,15 +32,9 @@ export class TokenBucket {
     this.incrementScriptSha = this.client.scriptLoad(INCREMENT_SCRIPT);
   }
 
-  public async consume(identifier: string, cost: number): Promise<{
+  public async consume(identifier: string, cost: number): Promise<RateLimitInfo & {
     success: boolean;
-    limit: number;
-    remaining: number;
-    resetIn: number;
   }> {
-    // todo: check cache
-    // todo: if cost < 1
-
     const now = Date.now();
 
     const [
@@ -60,15 +55,14 @@ export class TokenBucket {
 
     return {
       success: Boolean(success),
+      window: this.refillInterval,
       limit: this.max,
       remaining,
       resetIn,
     }
   }
 
-  public async refund(identifier: string, value: number): Promise<{
-    remaining: number;
-  }> {
+  public async refund(identifier: string, value: number): Promise<Pick<RateLimitInfo, 'remaining'>> {
     const remaining = await this.client.incrby(identifier, value);
     return {
       remaining,

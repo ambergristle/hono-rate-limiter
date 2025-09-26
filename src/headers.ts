@@ -36,8 +36,8 @@ const draft6 = (c: Context, info: RateLimitInfo): void => {
     return;
   };
 
-  const windowSeconds = Math.ceil(info.windowMilliseconds / 1000);
-  const resetSeconds = Math.ceil(info.resetMilliseconds / 1000);
+  const windowSeconds = Math.ceil(info.window / 1000);
+  const resetSeconds = Math.ceil(info.resetIn / 1000);
 
   c.header('RateLimit-Policy', `${info.limit};w=${windowSeconds}`);
   c.header('RateLimit-Limit', info.limit.toString());
@@ -56,8 +56,8 @@ const draft7 = (c: Context, info: RateLimitInfo): void => {
     return;
   };
 
-  const windowSeconds = Math.ceil(info.windowMilliseconds / 1000);
-  const resetSeconds = Math.ceil(info.resetMilliseconds / 1000);
+  const windowSeconds = Math.ceil(info.window / 1000);
+  const resetSeconds = Math.ceil(info.resetIn / 1000);
 
   c.header('RateLimit-Policy', `${info.limit};w=${windowSeconds}`);
   c.header('RateLimit', `limit=${info.limit}, remaining=${info.remaining}, reset=${resetSeconds}`);
@@ -83,8 +83,8 @@ const draft8 = async (
     return;
   };
 
-  const windowSeconds = Math.ceil(info.windowMilliseconds / 1000);
-  const resetSeconds = Math.ceil(info.resetMilliseconds / 1000);
+  const windowSeconds = Math.ceil(info.window / 1000);
+  const resetSeconds = Math.ceil(info.resetIn / 1000);
 
   const partitionKey = await getPartitionKey(info.identifier);
 
@@ -131,7 +131,7 @@ const retryAfter = (
     return;
   };
 
-  const resetSeconds = Math.ceil(info.resetMilliseconds / 1000);
+  const resetSeconds = Math.ceil(info.resetIn / 1000);
 
   c.header('Retry-After', resetSeconds.toString());
 }

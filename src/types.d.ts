@@ -1,8 +1,8 @@
 export type MaybePromise<T> = T | Promise<T>;
 
 export type RateLimitInfo = {
-  windowMilliseconds: number;
+  window: number;
   limit: number;
   remaining: number;
-  resetMilliseconds: number;
+  resetIn: number;
 }

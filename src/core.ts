@@ -1,6 +1,6 @@
 import type { Context, Env, MiddlewareHandler } from 'hono';
 import { setHeaders } from './headers';
-import { StoreAdapter } from './store/store';
+import { Algorithm } from './algorithms/types';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -11,19 +11,22 @@ export const rateLimiter = <
   name = 'limiter' as N,
   generateKey,
   prefix,
+
+  algo,
+
   // limiter,
   headerSpec = 'draft-8',
   refundFailed,
-  store,
 }: {
   name?: N,
   generateKey: (c: Context<E>) => MaybePromise<string>;
   prefix?: string;
+
+  algo: Algorithm;
+
   /** @default 'draft-8' */
   headerSpec?: 'draft-6' | 'draft-7' | 'draft-8';
   refundFailed?: boolean;
-  algorithm: any;
-  store: (c: Context<E>) => MaybePromise<StoreAdapter> | StoreAdapter;
 }): MiddlewareHandler<{ Variables: { [key in N]: any } }> => {
 
   return async (c, next) => {
@@ -35,19 +38,17 @@ export const rateLimiter = <
 
     const identifier = segments.join(':');
 
+    const limiter = algo
+
     // random request id?
     // cost?
-    let rateLimitInfo = await limiter.consume(identifier)
+    let rateLimitInfo = await limiter.consume(identifier, cost)
 
     await next();
 
     if (c.error && refundFailed) {
       // if (consumed > 0 && refunded < consumed) {
-      //   await limiter.refund(key, consumed - refunded);
-      // }
-
-      // cost?
-      rateLimitInfo = await limiter.refund(result.key);
+      const { remaining } = await limiter.refund(identifier, cost);
     }
 
     if (headerSpec) {

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import type { Redis } from '@upstash/redis';
+import { RateLimitInfo } from '../../types';
 
 type IncrementArgs = [string, string, string];
 type IncrementData = [number, number];
@@ -19,7 +20,6 @@ export class SlidingWindowLog {
 
   private readonly max: number;
   private readonly window: number;
-  // private readonly expiresInMilliseconds: number;
 
   private incrementScriptSha: Promise<string>;
 
@@ -28,16 +28,11 @@ export class SlidingWindowLog {
 
     this.max = options.max;
     this.window = options.window * 1000;
-    // this.expiresInMilliseconds = options.expiresInMilliseconds;
-
     this.incrementScriptSha = this.client.scriptLoad(INCREMENT_SCRIPT);
   }
 
-  public async consume(identifier: string): Promise<{
+  public async consume(identifier: string): Promise<RateLimitInfo & {
     success: boolean;
-    limit: number;
-    remaining: number;
-    resetIn: number;
   }> {
     const now = Date.now();
 
@@ -47,22 +42,20 @@ export class SlidingWindowLog {
       [
         this.max.toString(),
         this.window.toString(),
-        // this.ex,
         now.toString(),
       ]
     );
 
     return {
       success: Boolean(success),
+      window: this.window,
       limit: this.max,
       remaining,
       resetIn: this.window,
     }
   }
 
-  public async refund(identifier: string): Promise<{
-    remaining: number;
-  }> {
+  public async refund(identifier: string): Promise<Pick<RateLimitInfo, 'remaining'>> {
     const count = await this.client.eval<[], number>(
       REFUND_SCRIPT,
       [identifier],
