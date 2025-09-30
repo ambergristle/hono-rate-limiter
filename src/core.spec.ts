@@ -62,3 +62,28 @@ describe('request handling', () => {
 describe('refunds', () => {
 
 });
+
+// control timers
+
+
+// concurrent requests
+// limits isolated per id?
+// invalid id handling
+// configurable windows
+// storage failures
+// response time - 
+// resource use - 
+
+// token
+// generation rate
+// burst capacity
+// partial? consumption
+
+// sliding
+// smooth across boundaries
+
+// sliding log
+// exact
+
+// fixed window
+// boundaries?

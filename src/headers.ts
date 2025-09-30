@@ -1,14 +1,19 @@
 import type { Context } from 'hono';
 import type { RateLimitInfo } from './types';
 
+type RateLimitInfoV8 = RateLimitInfo & {
+  policyName: string;
+  identifier: string;
+}
+
+/**
+ * Set rate limit response headers using specified spec
+ */
 export const setHeaders = async (
   c: Context,
   draft: 'draft-6' | 'draft-7' | 'draft-8',
-  info: RateLimitInfo & {
-    policyName: string;
-    identifier: string;
-  }
-) => {
+  info: RateLimitInfoV8,
+): Promise<void> => {
   switch (draft) {
     case 'draft-6': {
       return draft6(c, info);
@@ -26,9 +31,6 @@ export const setHeaders = async (
 
 /**
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-06
- * @param c 
- * @param info 
- * @returns 
  */
 const draft6 = (c: Context, info: RateLimitInfo): void => {
   if (c.finalized) {
@@ -47,8 +49,6 @@ const draft6 = (c: Context, info: RateLimitInfo): void => {
 
 /**
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-07
- * @param c 
- * @returns 
  */
 const draft7 = (c: Context, info: RateLimitInfo): void => {
   if (c.finalized) {
@@ -64,19 +64,9 @@ const draft7 = (c: Context, info: RateLimitInfo): void => {
 }
 
 /**
- * 
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-08
- * @param c 
- * @param info 
- * @returns 
  */
-const draft8 = async (
-  c: Context,
-  info: RateLimitInfo & {
-    policyName: string;
-    identifier: string;
-  },
-): Promise<void> => {
+const draft8 = async (c: Context, info: RateLimitInfoV8): Promise<void> => {
 
   if (c.finalized) {
     // log?
@@ -96,11 +86,9 @@ const draft8 = async (
 }
 
 /**
- * Returns the hash of the identifier, truncated to 12 bytes, and then converted
- * to base64 so that it can be used as a 16 byte partition key. The 16-byte limit
- * is arbitrary, and folllows from the examples given in the 8th draft.
- *
- * @param identifier {string} - The identifier to hash.
+ * Convert client identifier into byte sequence, as required by Draft 8.
+ * Identifier is hashed to obfuscate any data it may incode. The result is truncated
+ * into a 16-byte string, following examples in the draft.
  */
 export const getPartitionKey = async (identifier: string): Promise<string> => {
   const bytes = new TextEncoder().encode(identifier);
@@ -110,18 +98,9 @@ export const getPartitionKey = async (identifier: string): Promise<string> => {
   return Buffer.from(buffer).toBase64();
 }
 
-// const getPartitionKey = async (identifier: string): Promise<string> => {
-//   // relies on node:crypto; alt?
-//   // crypto.subtle.digest('SHA-256', key);
-//   crypto.subtle.digest('SHA-256', key)
-
-//   const hash = createHash('sha256')
-//   hash.update(key)
-
-//   const partitionKey = hash.digest('hex').slice(0, 12)
-//   return Buffer.from(partitionKey).toString('base64')
-// }
-
+/**
+ * Set `Retry-After` response header
+ */
 const retryAfter = (
   c: Context,
   info: RateLimitInfo,

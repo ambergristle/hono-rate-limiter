@@ -1,35 +1,33 @@
-import * as fs from 'fs';
-import type { Redis } from '@upstash/redis';
-import { RateLimitInfo } from '../../types';
+import type { RateLimitInfo } from '../../types';
+import type { Algorithm, RedisClient } from '../types';
+import incrementScript from './increment.lua' with { type: "text" };
+import resetScript from './reset.lua' with { type: "text" };
+import refundScript from './refund.lua' with { type: "text" };
 
 type IncrementArgs = [string, string, string, string];
 type IncrementData = [number, number];
-
-const INCREMENT_SCRIPT = fs.readFileSync('./increment.lua', 'utf8');
-
-const RESET_SCRIPT = fs.readFileSync('./reset.lua', 'utf8');
 
 type SlidingWindowCounterOptions = {
   max: number;
   window: number;
 }
 
-export class SlidingWindowCounter {
+export class SlidingWindowCounter implements Algorithm {
 
-  private readonly client: Redis;
+  private readonly client: RedisClient;
 
-  private readonly max: number;
-  private readonly window: number;
+  public readonly max: number;
+  public readonly window: number;
 
   private incrementScriptSha: Promise<string>;
 
-  constructor(client: Redis, options: SlidingWindowCounterOptions) {
+  constructor(client: RedisClient, options: SlidingWindowCounterOptions) {
     this.client = client;
 
     this.max = options.max;
     this.window = options.window * 1000;
 
-    this.incrementScriptSha = this.client.scriptLoad(INCREMENT_SCRIPT);
+    this.incrementScriptSha = this.client.scriptLoad(incrementScript);
   }
 
   public async consume(identifier: string, cost: number): Promise<RateLimitInfo & {
@@ -60,12 +58,13 @@ export class SlidingWindowCounter {
       limit: this.max,
       remaining,
       resetIn: (currentWindow + 1) * this.window,
+      pending: Promise.resolve(),
     }
   }
 
   public async refund(identifier: string, value: number): Promise<Pick<RateLimitInfo, 'remaining'>> {
-    const used = await this.client.evalsha<[string], number>(
-      await this.incrementScriptSha,
+    const used = await this.client.eval<[string], number>(
+      refundScript,
       [identifier],
       [value.toString()],
     );
@@ -77,7 +76,7 @@ export class SlidingWindowCounter {
 
   public async reset(identifier: string): Promise<void> {
     await this.client.eval(
-      RESET_SCRIPT,
+      resetScript,
       [identifier],
       [], // null?
     );

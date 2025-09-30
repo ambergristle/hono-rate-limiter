@@ -1,35 +1,33 @@
-import * as fs from 'fs';
-import type { Redis } from '@upstash/redis';
-import { RateLimitInfo } from '../../types';
+import type { RateLimitInfo } from '../../types';
+import type { Algorithm, RedisClient } from '../types';
+import incrementScript from './increment.lua' with { type: "text" };
 
 type IncrementArgs = [string, string, string, string, string];
 type IncrementData = [number, number, number];
 
-const INCREMENT_SCRIPT = fs.readFileSync('./increment.lua', 'utf8');
-
 type TokenBucketOptions = {
   max: number;
-  refillInterval: number;
-  refillRate: number;
+  interval: number;
+  rate: number;
 }
 
-export class TokenBucket {
-  private readonly client: Redis;
+export class TokenBucket implements Algorithm {
+  private readonly client: RedisClient;
 
-  private readonly max: number;
-  private readonly refillInterval: number;
-  private readonly refillRate: number;
+  public readonly max: number;
+  private readonly interval: number;
+  private readonly rate: number;
 
   private readonly incrementScriptSha: Promise<string>;
 
-  constructor(client: Redis, options: TokenBucketOptions) {
+  constructor(client: RedisClient, options: TokenBucketOptions) {
     this.client = client;
 
     this.max = options.max;
-    this.refillInterval = options.refillInterval * 1000;
-    this.refillRate = options.refillRate;
+    this.interval = options.interval * 1000;
+    this.rate = options.rate;
 
-    this.incrementScriptSha = this.client.scriptLoad(INCREMENT_SCRIPT);
+    this.incrementScriptSha = this.client.scriptLoad(incrementScript);
   }
 
   public async consume(identifier: string, cost: number): Promise<RateLimitInfo & {
@@ -46,8 +44,8 @@ export class TokenBucket {
       [identifier],
       [
         this.max.toString(),
-        this.refillInterval.toString(),
-        this.refillRate.toString(),
+        this.interval.toString(),
+        this.rate.toString(),
         cost.toString(),
         now.toString(),
       ],
@@ -55,10 +53,11 @@ export class TokenBucket {
 
     return {
       success: Boolean(success),
-      window: this.refillInterval,
+      window: this.interval,
       limit: this.max,
       remaining,
       resetIn,
+      pending: Promise.resolve(),
     }
   }
 

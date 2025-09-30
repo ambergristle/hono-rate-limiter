@@ -17,8 +17,8 @@ if bucket[1] == false then
   tokens = max
 else
   -- otherwise populate from old one
-  refilledAt = tonumber(bucket[1])
-  tokens = tonumber(bucket[2])
+  tokens = tonumber(bucket[1])
+  refilledAt = tonumber(bucket[2])
 end
 
 if now >= refilledAt + interval then

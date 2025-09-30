@@ -1,34 +1,30 @@
-import * as fs from 'fs';
-import type { Redis } from '@upstash/redis';
-import { RateLimitInfo } from '../../types';
+import type { RateLimitInfo } from '../../types';
+import { Algorithm, RedisClient } from '../types';
+import incrementScript from './increment.lua' with { type: "text" };
+import refundScript from './refund.lua' with { type: "text" };
 
 type IncrementArgs = [string, string, string];
 type IncrementData = [number, number];
 
-const INCREMENT_SCRIPT = fs.readFileSync('./increment.lua', 'utf8');
-
-const REFUND_SCRIPT = fs.readFileSync('./refund.lua', 'utf8');
-
 type SlidingWindowLogOptions = {
   max: number;
   window: number;
-  expiresInMilliseconds: number;
 }
 
-export class SlidingWindowLog {
-  private readonly client: Redis;
+export class SlidingWindowLog implements Algorithm {
+  private readonly client: RedisClient;
 
-  private readonly max: number;
-  private readonly window: number;
+  public readonly max: number;
+  public readonly window: number;
 
   private incrementScriptSha: Promise<string>;
 
-  constructor(client: Redis, options: SlidingWindowLogOptions) {
+  constructor(client: RedisClient, options: SlidingWindowLogOptions) {
     this.client = client;
 
     this.max = options.max;
     this.window = options.window * 1000;
-    this.incrementScriptSha = this.client.scriptLoad(INCREMENT_SCRIPT);
+    this.incrementScriptSha = this.client.scriptLoad(incrementScript);
   }
 
   public async consume(identifier: string): Promise<RateLimitInfo & {
@@ -52,12 +48,13 @@ export class SlidingWindowLog {
       limit: this.max,
       remaining,
       resetIn: this.window,
+      pending: Promise.resolve(),
     }
   }
 
   public async refund(identifier: string): Promise<Pick<RateLimitInfo, 'remaining'>> {
     const count = await this.client.eval<[], number>(
-      REFUND_SCRIPT,
+      refundScript,
       [identifier],
       [], // null?
     );

@@ -5,4 +5,5 @@ export type RateLimitInfo = {
   limit: number;
   remaining: number;
   resetIn: number;
+  pending: Promise<void>;
 }
