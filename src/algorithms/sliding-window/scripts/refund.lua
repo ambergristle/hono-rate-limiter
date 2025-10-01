@@ -5,8 +5,7 @@ local cursor = "0"
 local keys = {}
 
 repeat
-  -- id .. "*"
-  local result = redis.call("SCAN", cursor, "MATCH", id)
+  local result = redis.call("SCAN", cursor, "MATCH", id .. "*")
 
   cursor = result[0]
 

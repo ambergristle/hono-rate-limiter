@@ -34,7 +34,7 @@ export const setHeaders = async (
  */
 const draft6 = (c: Context, info: RateLimitInfo): void => {
   if (c.finalized) {
-    // log?
+    console.warn('Context finalized before RateLimit headers could be set');
     return;
   };
 
@@ -52,7 +52,7 @@ const draft6 = (c: Context, info: RateLimitInfo): void => {
  */
 const draft7 = (c: Context, info: RateLimitInfo): void => {
   if (c.finalized) {
-    // log?
+    console.warn('Context finalized before RateLimit headers could be set');
     return;
   };
 
@@ -69,7 +69,7 @@ const draft7 = (c: Context, info: RateLimitInfo): void => {
 const draft8 = async (c: Context, info: RateLimitInfoV8): Promise<void> => {
 
   if (c.finalized) {
-    // log?
+    console.warn('Context finalized before RateLimit headers could be set');
     return;
   };
 
@@ -104,7 +104,7 @@ const retryAfter = (
   info: RateLimitInfo,
 ): void => {
   if (c.finalized) {
-    // log?
+    console.warn('Context finalized before RateLimit headers could be set');
     return;
   };
 

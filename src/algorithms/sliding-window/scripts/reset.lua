@@ -3,8 +3,7 @@ local id = KEYS[1]
 local cursor = "0"
 
 repeat
-  -- id .. "*"
-  local result = redis.call("SCAN", cursor, "MATCH", id)
+  local result = redis.call("SCAN", cursor, "MATCH", id .. "*")
 
   cursor = result[0]
 
