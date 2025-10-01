@@ -8,24 +8,30 @@
 - set retry-after header
 - add warning log if `c.finalized` before headers are set?
 - rate limit info (+ policy + id)
+- pk generation
+  https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-08#section-5.1
 
 - null value required for reset eval call?
 - does the wildcard need to be in the refund, reset match fns?
 
-- introspection
 - handle dynamic cost window log
 - cache
 - handle multiple/variable refunds
-
 
 ## tests
 - config
 - refund
 - reset
 - introspect
+
 ### middleware
 - headers
 - error response
+
+## definitions
+
+- quota: capacity allocated to client requests, measured in quota units
+- 
 
 
 // fixed window

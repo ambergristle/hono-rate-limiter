@@ -87,8 +87,6 @@ const draft8 = async (c: Context, info: RateLimitInfoV8): Promise<void> => {
 
 /**
  * Convert client identifier into byte sequence, as required by Draft 8.
- * Identifier is hashed to obfuscate any data it may incode. The result is truncated
- * into a 16-byte string, following examples in the draft.
  */
 export const getPartitionKey = async (identifier: string): Promise<string> => {
   const bytes = new TextEncoder().encode(identifier);

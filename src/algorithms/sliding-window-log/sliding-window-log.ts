@@ -1,7 +1,8 @@
-import type { RateLimitInfo } from '../../types';
+import type { RateLimitInfo, RateLimitResult } from '../../types';
 import { Algorithm, RedisClient } from '../types';
-import incrementScript from './increment.lua' with { type: "text" };
-import refundScript from './refund.lua' with { type: "text" };
+import incrementScript from './scripts/increment.lua' with { type: "text" };
+import introspectScript from './scripts/introspect.lua' with { type: "text" };
+import refundScript from './scripts/refund.lua' with { type: "text" };
 
 type IncrementArgs = [string, string, string];
 type IncrementData = [number, number];
@@ -18,6 +19,7 @@ export class SlidingWindowLog implements Algorithm {
   public readonly window: number;
 
   private incrementScriptSha: Promise<string>;
+  private introspectScriptSha: Promise<string>;
 
   constructor(client: RedisClient, options: SlidingWindowLogOptions) {
     this.client = client;
@@ -25,14 +27,33 @@ export class SlidingWindowLog implements Algorithm {
     this.max = options.max;
     this.window = options.window * 1000;
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
+    this.introspectScriptSha = this.client.scriptLoad(introspectScript);
   }
 
-  public async consume(identifier: string): Promise<RateLimitInfo & {
-    success: boolean;
-  }> {
+  public async check(identifier: string): Promise<RateLimitInfo> {
     const now = Date.now();
 
-    const [success, remaining] = await this.client.evalsha<IncrementArgs, IncrementData>(
+    const used = await this.client.evalsha<[string, string], number>(
+      await this.introspectScriptSha,
+      [],
+      [
+        this.window.toString(),
+        now.toString(),
+      ]
+    );
+
+    return {
+      window: this.window,
+      limit: this.max,
+      remaining: Math.max(0, this.max - used),
+      resetIn: this.window,
+    };
+  }
+
+  public async consume(identifier: string): Promise<RateLimitResult> {
+    const now = Date.now();
+
+    const [allowed, remaining] = await this.client.evalsha<IncrementArgs, IncrementData>(
       await this.incrementScriptSha,
       [identifier],
       [
@@ -43,7 +64,7 @@ export class SlidingWindowLog implements Algorithm {
     );
 
     return {
-      success: Boolean(success),
+      allowed: Boolean(allowed),
       window: this.window,
       limit: this.max,
       remaining,

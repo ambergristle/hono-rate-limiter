@@ -1,6 +1,6 @@
-import type { RateLimitInfo } from '../../types';
+import type { RateLimitInfo, RateLimitResult } from '../../types';
 import type { Algorithm, RedisClient } from '../types';
-import incrementScript from './increment.lua' with { type: "text" };
+import incrementScript from './scripts/increment.lua' with { type: "text" };
 
 type IncrementArgs = [string, string, string, string, string];
 type IncrementData = [number, number, number];
@@ -30,13 +30,23 @@ export class TokenBucket implements Algorithm {
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
   }
 
-  public async consume(identifier: string, cost: number): Promise<RateLimitInfo & {
-    success: boolean;
-  }> {
+  public async check(identifier: string): Promise<RateLimitInfo> {
+
+    const remaining = await this.client.get<number>(identifier);
+
+    return {
+      window: this.interval,
+      limit: this.max,
+      remaining: remaining ?? this.max,
+      resetIn: Date.now() + this.interval,
+    };
+  }
+
+  public async consume(identifier: string, cost: number): Promise<RateLimitResult> {
     const now = Date.now();
 
     const [
-      success,
+      allowed,
       remaining,
       resetIn
     ] = await this.client.evalsha<IncrementArgs, IncrementData>(
@@ -52,13 +62,13 @@ export class TokenBucket implements Algorithm {
     );
 
     return {
-      success: Boolean(success),
+      allowed: Boolean(allowed),
       window: this.interval,
       limit: this.max,
       remaining,
       resetIn,
       pending: Promise.resolve(),
-    }
+    };
   }
 
   public async refund(identifier: string, value: number): Promise<Pick<RateLimitInfo, 'remaining'>> {

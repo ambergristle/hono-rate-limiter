@@ -1,7 +1,7 @@
-import type { RateLimitInfo } from '../../types';
+import type { RateLimitInfo, RateLimitResult } from '../../types';
 import type { Algorithm, RedisClient } from '../types';
-import incrementScript from './increment.lua' with { type: "text" };
-import resetScript from './reset.lua' with { type: "text" };
+import incrementScript from './scripts/increment.lua' with { type: "text" };
+import resetScript from './scripts/reset.lua' with { type: "text" };
 
 type FixedWindowCounterOptions = {
   max: number;
@@ -36,13 +36,10 @@ export class FixedWindowCounter implements Algorithm {
       limit: this.max,
       remaining: Math.max(0, this.max - used),
       resetIn: (currentWindow + 1) * this.window,
-      pending: Promise.resolve(),
-    }
+    };
   }
 
-  public async consume(identifier: string, cost: number): Promise<RateLimitInfo & {
-    success: boolean;
-  }> {
+  public async consume(identifier: string, cost: number): Promise<RateLimitResult> {
     const currentWindow = Math.floor(Date.now() / this.window);
     const key = [identifier, currentWindow].join(":");
 
@@ -56,13 +53,13 @@ export class FixedWindowCounter implements Algorithm {
     );
 
     return {
-      success: used <= this.max,
+      allowed: used <= this.max,
       window: this.window,
       limit: this.max,
       remaining: Math.max(0, this.max - used),
       resetIn: (currentWindow + 1) * this.window,
       pending: Promise.resolve(),
-    }
+    };
   }
 
   public async refund(identifier: string, value: number): Promise<Pick<RateLimitInfo, 'remaining'>> {
