@@ -1,3 +1,4 @@
+import { BlockedCache } from '../../cache';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
 import { Algorithm, RedisClient } from '../types';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
@@ -10,10 +11,13 @@ type IncrementData = [number, number];
 type SlidingWindowLogOptions = {
   max: number;
   window: number;
+  cache?: Map<string, number>;
 }
 
 export class SlidingWindowLog implements Algorithm {
   private readonly client: RedisClient;
+
+  private readonly cache: BlockedCache;
 
   public readonly max: number;
   public readonly window: number;
@@ -24,8 +28,15 @@ export class SlidingWindowLog implements Algorithm {
   constructor(client: RedisClient, options: SlidingWindowLogOptions) {
     this.client = client;
 
+    const cache = options.cache instanceof Map
+      ? options.cache
+      : new Map();
+
+    this.cache = new BlockedCache(cache);
+
     this.max = options.max;
     this.window = options.window * 1000;
+
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
     this.introspectScriptSha = this.client.scriptLoad(introspectScript);
   }
@@ -53,6 +64,18 @@ export class SlidingWindowLog implements Algorithm {
   public async consume(identifier: string): Promise<RateLimitResult> {
     const now = Date.now();
 
+    const bucket = this.cache.isBlocked(identifier);
+    if (bucket.blocked) {
+      return {
+        allowed: false,
+        window: this.window,
+        limit: this.max,
+        remaining: 0,
+        resetIn: bucket.resetAt - now,
+        pending: Promise.resolve(),
+      }
+    }
+
     const [allowed, remaining] = await this.client.evalsha<IncrementArgs, IncrementData>(
       await this.incrementScriptSha,
       [identifier],
@@ -62,6 +85,10 @@ export class SlidingWindowLog implements Algorithm {
         now.toString(),
       ]
     );
+
+    if (!allowed) {
+      this.cache.blockUntil(identifier, Date.now() + this.window);
+    }
 
     return {
       allowed: Boolean(allowed),

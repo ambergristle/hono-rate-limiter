@@ -1,3 +1,4 @@
+import { BlockedCache } from '../../cache';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
 import type { Algorithm, RedisClient } from '../types';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
@@ -6,10 +7,13 @@ import resetScript from './scripts/reset.lua' with { type: "text" };
 type FixedWindowCounterOptions = {
   max: number;
   window: number;
+  cache?: Map<string, number>;
 }
 
 export class FixedWindowCounter implements Algorithm {
   private readonly client: RedisClient;
+
+  private readonly cache: BlockedCache;
 
   public readonly max: number;
   public readonly window: number;
@@ -18,6 +22,12 @@ export class FixedWindowCounter implements Algorithm {
 
   constructor(client: RedisClient, options: FixedWindowCounterOptions) {
     this.client = client;
+
+    const cache = options.cache instanceof Map
+      ? options.cache
+      : new Map();
+
+    this.cache = new BlockedCache(cache);
 
     this.max = options.max;
     this.window = options.window * 1000;
@@ -40,6 +50,18 @@ export class FixedWindowCounter implements Algorithm {
   }
 
   public async consume(identifier: string, cost: number): Promise<RateLimitResult> {
+    const bucket = this.cache.isBlocked(identifier);
+    if (bucket.blocked) {
+      return {
+        allowed: false,
+        window: this.window,
+        limit: this.max,
+        remaining: 0,
+        resetIn: bucket.resetAt - Date.now(),
+        pending: Promise.resolve(),
+      }
+    }
+
     const currentWindow = Math.floor(Date.now() / this.window);
     const key = [identifier, currentWindow].join(":");
 
@@ -52,12 +74,19 @@ export class FixedWindowCounter implements Algorithm {
       ],
     );
 
+    const allowed = used <= this.max;
+    const resetAt = (currentWindow + 1) * this.window;
+
+    if (!allowed) {
+      this.cache.blockUntil(identifier, resetAt);
+    }
+
     return {
-      allowed: used <= this.max,
+      allowed,
       window: this.window,
       limit: this.max,
       remaining: Math.max(0, this.max - used),
-      resetIn: (currentWindow + 1) * this.window,
+      resetIn: resetAt - Date.now(),
       pending: Promise.resolve(),
     };
   }

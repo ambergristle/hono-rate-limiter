@@ -3,6 +3,7 @@ import type { Algorithm, RedisClient } from '../types';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 import resetScript from './scripts/reset.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
+import { BlockedCache } from '../../cache';
 
 type IncrementArgs = [string, string, string, string];
 type IncrementData = [number, number];
@@ -10,11 +11,13 @@ type IncrementData = [number, number];
 type SlidingWindowCounterOptions = {
   max: number;
   window: number;
+  cache?: Map<string, number>;
 }
 
 export class SlidingWindowCounter implements Algorithm {
-
   private readonly client: RedisClient;
+
+  private readonly cache: BlockedCache;
 
   public readonly max: number;
   public readonly window: number;
@@ -23,6 +26,12 @@ export class SlidingWindowCounter implements Algorithm {
 
   constructor(client: RedisClient, options: SlidingWindowCounterOptions) {
     this.client = client;
+
+    const cache = options.cache instanceof Map
+      ? options.cache
+      : new Map();
+
+    this.cache = new BlockedCache(cache);
 
     this.max = options.max;
     this.window = options.window * 1000;
@@ -47,6 +56,18 @@ export class SlidingWindowCounter implements Algorithm {
   public async consume(identifier: string, cost: number): Promise<RateLimitResult> {
     const now = Date.now();
 
+    const bucket = this.cache.isBlocked(identifier);
+    if (bucket.blocked) {
+      return {
+        allowed: false,
+        window: this.window,
+        limit: this.max,
+        remaining: 0,
+        resetIn: bucket.resetAt - now,
+        pending: Promise.resolve(),
+      }
+    }
+
     const currentWindow = Math.floor(now / this.window);
     const currentKey = `${identifier}:${currentWindow}`;
 
@@ -64,12 +85,18 @@ export class SlidingWindowCounter implements Algorithm {
       ],
     );
 
+    const resetAt = (currentWindow + 1) * this.window;
+
+    if (!allowed) {
+      this.cache.blockUntil(identifier, resetAt);
+    }
+
     return {
       allowed: Boolean(allowed),
       window: this.window,
       limit: this.max,
       remaining,
-      resetIn: (currentWindow + 1) * this.window,
+      resetIn: resetAt - Date.now(),
       pending: Promise.resolve(),
     }
   }
