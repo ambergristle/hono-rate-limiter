@@ -1,6 +1,7 @@
 import { BlockedCache } from '../../cache';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
 import type { Algorithm, RedisClient } from '../types';
+import { safeEval } from '../utils';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 
 type IncrementArgs = [string, string, string, string, string];
@@ -71,8 +72,12 @@ export class TokenBucket implements Algorithm {
       allowed,
       remaining,
       resetAt
-    ] = await this.client.evalsha<IncrementArgs, IncrementData>(
-      await this.incrementScriptSha,
+    ] = await safeEval<IncrementArgs, IncrementData>(
+      this.client,
+      {
+        hash: await this.incrementScriptSha,
+        script: incrementScript,
+      },
       [identifier],
       [
         this.max.toString(),

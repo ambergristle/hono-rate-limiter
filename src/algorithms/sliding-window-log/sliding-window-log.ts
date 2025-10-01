@@ -1,6 +1,7 @@
 import { BlockedCache } from '../../cache';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
 import { Algorithm, RedisClient } from '../types';
+import { safeEval } from '../utils';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 import introspectScript from './scripts/introspect.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
@@ -76,14 +77,18 @@ export class SlidingWindowLog implements Algorithm {
       }
     }
 
-    const [allowed, remaining] = await this.client.evalsha<IncrementArgs, IncrementData>(
-      await this.incrementScriptSha,
+    const [allowed, remaining] = await safeEval<IncrementArgs, IncrementData>(
+      this.client,
+      {
+        hash: await this.incrementScriptSha,
+        script: incrementScript,
+      },
       [identifier],
       [
         this.max.toString(),
         this.window.toString(),
         now.toString(),
-      ]
+      ],
     );
 
     if (!allowed) {

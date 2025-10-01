@@ -4,6 +4,7 @@ import incrementScript from './scripts/increment.lua' with { type: "text" };
 import resetScript from './scripts/reset.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
 import { BlockedCache } from '../../cache';
+import { safeEval } from '../utils';
 
 type IncrementArgs = [string, string, string, string];
 type IncrementData = [number, number];
@@ -74,15 +75,19 @@ export class SlidingWindowCounter implements Algorithm {
     const previousWindow = currentWindow - 1;
     const previousKey = `${identifier}:${previousWindow}`;
 
-    const [allowed, remaining] = await this.client.evalsha<IncrementArgs, IncrementData>(
-      await this.incrementScriptSha,
+    const [allowed, remaining] = await safeEval<IncrementArgs, IncrementData>(
+      this.client,
+      {
+        hash: await this.incrementScriptSha,
+        script: incrementScript,
+      },
       [previousKey, currentKey],
       [
         this.window.toString(),
         this.max.toString(),
         cost.toString(),
         now.toString()
-      ],
+      ]
     );
 
     const resetAt = (currentWindow + 1) * this.window;
