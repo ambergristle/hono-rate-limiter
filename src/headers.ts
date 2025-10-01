@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
-import type { RateLimitInfo } from './types';
+import type { RateLimitResult } from './types';
 
-type RateLimitInfoV8 = RateLimitInfo & {
+type RateLimitInfoV8 = RateLimitResult & {
   policyName: string;
   identifier: string;
 }
@@ -32,7 +32,7 @@ export const setHeaders = async (
 /**
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-06
  */
-const draft6 = (c: Context, info: RateLimitInfo): void => {
+const draft6 = (c: Context, info: RateLimitResult): void => {
   if (c.finalized) {
     console.warn('Context finalized before RateLimit headers could be set');
     return;
@@ -45,12 +45,16 @@ const draft6 = (c: Context, info: RateLimitInfo): void => {
   c.header('RateLimit-Limit', info.limit.toString());
   c.header('RateLimit-Remaining', info.remaining.toString());
   c.header('RateLimit-Reset', resetSeconds.toString());
+
+  if (!info.allowed) {
+    c.header('Retry-After', resetSeconds.toString());
+  }
 }
 
 /**
  * @see https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-07
  */
-const draft7 = (c: Context, info: RateLimitInfo): void => {
+const draft7 = (c: Context, info: RateLimitResult): void => {
   if (c.finalized) {
     console.warn('Context finalized before RateLimit headers could be set');
     return;
@@ -61,6 +65,10 @@ const draft7 = (c: Context, info: RateLimitInfo): void => {
 
   c.header('RateLimit-Policy', `${info.limit};w=${windowSeconds}`);
   c.header('RateLimit', `limit=${info.limit}, remaining=${info.remaining}, reset=${resetSeconds}`);
+
+  if (!info.allowed) {
+    c.header('Retry-After', resetSeconds.toString());
+  }
 }
 
 /**
@@ -83,6 +91,10 @@ const draft8 = async (c: Context, info: RateLimitInfoV8): Promise<void> => {
 
   c.header('RateLimit-Policy', `"${info.policyName}"; ${policy}`)
   c.header('RateLimit', `"${info.policyName}"; ${header}`)
+
+  if (!info.allowed) {
+    c.header('Retry-After', resetSeconds.toString());
+  }
 }
 
 /**
@@ -94,21 +106,4 @@ export const getPartitionKey = async (identifier: string): Promise<string> => {
 
   const buffer = Buffer.from(hash).toHex().slice(0, 12);
   return Buffer.from(buffer).toBase64();
-}
-
-/**
- * Set `Retry-After` response header
- */
-const retryAfter = (
-  c: Context,
-  info: RateLimitInfo,
-): void => {
-  if (c.finalized) {
-    console.warn('Context finalized before RateLimit headers could be set');
-    return;
-  };
-
-  const resetSeconds = Math.ceil(info.resetIn / 1000);
-
-  c.header('Retry-After', resetSeconds.toString());
 }
