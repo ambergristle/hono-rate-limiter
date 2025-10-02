@@ -2,34 +2,36 @@ import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { Redis } from '@upstash/redis';
 import { LimiterError } from '../../errors';
 import { SlidingWindowCounter } from './sliding-window-counter';
+import { MemoryCache } from '../../cache';
+import { Store } from '../types';
 
 const WINDOW = 5;
 const LIMIT = 1;
 const COST = 1;
 
-let client: Redis;
+let store: Store;
 beforeAll(() => {
-  client = new Redis({
-    url: process.env.UPSTASH_URL,
-    token: process.env.UPSTASH_TOKEN,
-  });
-})
+  store = {
+    client: Redis.fromEnv(),
+    blockedCache: new MemoryCache(),
+  }
+});
 
 describe('configuration', () => {
 
   test('requires max requests >= 0', () => {
-    const cb = () => new SlidingWindowCounter(client, {
-      max: -1,
-      window: WINDOW,
+    const cb = () => new SlidingWindowCounter(store, {
+      maxUnits: -1,
+      windowSeconds: WINDOW,
     });
 
     expect(cb).toThrowError(LimiterError);
   });
 
   test('requires window duration > 0', () => {
-    const cb = () => new SlidingWindowCounter(client, {
-      max: LIMIT,
-      window: 0,
+    const cb = () => new SlidingWindowCounter(store, {
+      maxUnits: LIMIT,
+      windowSeconds: 0,
     });
 
     expect(cb).toThrowError(LimiterError);
@@ -41,9 +43,9 @@ describe('behavior', () => {
 
   let algo: SlidingWindowCounter;
   beforeEach(() => {
-    algo = new SlidingWindowCounter(client, {
-      window: WINDOW,
-      max: LIMIT,
+    algo = new SlidingWindowCounter(store, {
+      windowSeconds: WINDOW,
+      maxUnits: LIMIT,
     });
   });
 
@@ -113,9 +115,9 @@ describe('behavior', () => {
     }, (WINDOW + 1) * 1000);
 
     test('rejects all requests if max=0', async () => {
-      algo = new SlidingWindowCounter(client, {
-        window: 30,
-        max: 0,
+      algo = new SlidingWindowCounter(store, {
+        windowSeconds: 30,
+        maxUnits: 0,
       });
 
       const identifier = crypto.randomUUID();
@@ -161,7 +163,7 @@ describe('behavior', () => {
     await algo.consume(identifier, COST);
     await algo.reset(identifier);
 
-    const bucket = await client.get(identifier);
+    const bucket = await store.client.get(identifier);
     expect(bucket).toBe(null);
   });
 

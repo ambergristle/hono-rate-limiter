@@ -2,23 +2,25 @@ import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { Redis } from '@upstash/redis';
 import { LimiterError } from '../../errors';
 import { TokenBucket } from './token-bucket';
+import { Store } from '../types';
+import { MemoryCache } from '../../cache';
 
 const INTERVAL = 5;
 const LIMIT = 1;
 const COST = 1;
 
-let client: Redis;
+let store: Store;
 beforeAll(() => {
-  client = new Redis({
-    url: process.env.UPSTASH_URL,
-    token: process.env.UPSTASH_TOKEN,
-  });
-})
+  store = {
+    client: Redis.fromEnv(),
+    blockedCache: new MemoryCache(),
+  }
+});
 
 describe('configuration', () => {
 
   test('requires window duration > 0', () => {
-    const cb = () => new TokenBucket(client, {
+    const cb = () => new TokenBucket(store, {
       max: LIMIT,
       interval: 0,
       rate: COST,
@@ -28,7 +30,7 @@ describe('configuration', () => {
   });
 
   test('requires max requests >= 0', () => {
-    const cb = () => new TokenBucket(client, {
+    const cb = () => new TokenBucket(store, {
       max: -1,
       interval: INTERVAL,
       rate: COST,
@@ -38,7 +40,7 @@ describe('configuration', () => {
   });
 
   test('requires refill rate > 0', () => {
-    const cb = () => new TokenBucket(client, {
+    const cb = () => new TokenBucket(store, {
       max: LIMIT,
       interval: INTERVAL,
       rate: 0,
@@ -53,7 +55,7 @@ describe('behavior', () => {
 
   let algo: TokenBucket;
   beforeEach(() => {
-    algo = new TokenBucket(client, {
+    algo = new TokenBucket(store, {
       max: LIMIT,
       interval: INTERVAL,
       rate: COST,
@@ -126,7 +128,7 @@ describe('behavior', () => {
     }, (INTERVAL + 1) * 1000);
 
     test('rejects all requests if max=0', async () => {
-      algo = new TokenBucket(client, {
+      algo = new TokenBucket(store, {
         max: 0,
         interval: INTERVAL,
         rate: COST,
@@ -176,7 +178,7 @@ describe('behavior', () => {
     await algo.consume(identifier);
     await algo.reset(identifier);
 
-    const bucket = await client.get(identifier);
+    const bucket = await store.client.get(identifier);
     expect(bucket).toBe(null);
   });
 

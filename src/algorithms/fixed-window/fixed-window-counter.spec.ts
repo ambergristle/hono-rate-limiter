@@ -2,23 +2,25 @@ import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { Redis } from '@upstash/redis';
 import { LimiterError } from '../../errors';
 import { FixedWindowCounter } from './fixed-window-counter';
+import { MemoryCache } from '../../cache';
+import { Store } from '../types';
 
 const WINDOW = 5;
 const LIMIT = 1;
 const COST = 1;
 
-let client: Redis;
+let store: Store;
 beforeAll(() => {
-  client = new Redis({
-    url: process.env.UPSTASH_URL,
-    token: process.env.UPSTASH_TOKEN,
-  });
-})
+  store = {
+    client: Redis.fromEnv(),
+    blockedCache: new MemoryCache(),
+  }
+});
 
 describe('configuration', () => {
 
   test('requires max requests >= 0', () => {
-    const cb = () => new FixedWindowCounter(client, {
+    const cb = () => new FixedWindowCounter(store, {
       max: -1,
       window: WINDOW,
     });
@@ -27,7 +29,7 @@ describe('configuration', () => {
   });
 
   test('requires window duration > 0', () => {
-    const cb = () => new FixedWindowCounter(client, {
+    const cb = () => new FixedWindowCounter(store, {
       max: LIMIT,
       window: 0,
     });
@@ -41,7 +43,7 @@ describe('behavior', () => {
 
   let algo: FixedWindowCounter;
   beforeEach(() => {
-    algo = new FixedWindowCounter(client, {
+    algo = new FixedWindowCounter(store, {
       window: WINDOW,
       max: LIMIT,
     });
@@ -113,7 +115,7 @@ describe('behavior', () => {
     }, (WINDOW + 1) * 1000);
 
     test('rejects all requests if max=0', async () => {
-      algo = new FixedWindowCounter(client, {
+      algo = new FixedWindowCounter(store, {
         window: 30,
         max: 0,
       });
@@ -161,7 +163,7 @@ describe('behavior', () => {
     await algo.consume(identifier, COST);
     await algo.reset(identifier);
 
-    const bucket = await client.get(identifier);
+    const bucket = await store.client.get(identifier);
     expect(bucket).toBe(null);
   });
 
