@@ -1,9 +1,9 @@
 import type { RateLimitInfo, RateLimitResult } from '../../types';
-import type { Algorithm, RedisClient } from '../types';
+import type { Algorithm, AlgorithmConstructor, RedisClient, Store } from '../types';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 import resetScript from './scripts/reset.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
-import { BlockedCache } from '../../cache';
+import { MemoryCache } from '../../cache';
 import { safeEval } from '../utils';
 import { LimiterError } from '../../errors';
 
@@ -11,56 +11,65 @@ type IncrementArgs = [string, string, string, string];
 type IncrementData = [number, number];
 
 type SlidingWindowCounterOptions = {
-  max: number;
-  window: number;
-  cache?: Map<string, number>;
+  maxUnits: number;
+  windowSeconds: number;
 }
 
 export class SlidingWindowCounter implements Algorithm {
+  public readonly policyName: 'sliding-window';
+
   private readonly client: RedisClient;
+  private readonly cache: MemoryCache;
 
-  private readonly cache: BlockedCache;
-
-  public readonly max: number;
-  public readonly window: number;
+  public readonly maxUnits: number;
+  public readonly windowSeconds: number;
 
   private incrementScriptSha: Promise<string>;
 
-  constructor(client: RedisClient, options: SlidingWindowCounterOptions) {
-    this.client = client;
+  constructor(store: Store, options: SlidingWindowCounterOptions) {
+    this.policyName = 'sliding-window';
 
-    const cache = options.cache instanceof Map
-      ? options.cache
-      : new Map();
+    this.client = store.client;
+    this.cache = store.blockedCache;
 
-    this.cache = new BlockedCache(cache);
-
-    if (options.max < 0) {
+    if (options.maxUnits < 0) {
       throw new LimiterError('Max quota units must be positive integer');
     }
 
-    this.max = options.max;
+    this.maxUnits = options.maxUnits;
 
-    if (options.window < 1) {
+    if (options.windowSeconds < 1) {
       throw new LimiterError('Window seconds must be nonzero');
     }
 
-    this.window = options.window * 1000;
+    this.windowSeconds = options.windowSeconds;
 
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
   }
 
+  private get windowMilliseconds() {
+    return this.windowSeconds * 1000;
+  }
+
+  static init(maxUnits: number, windowSeconds: number): AlgorithmConstructor {
+    return (store) => new SlidingWindowCounter(store, {
+      maxUnits,
+      windowSeconds,
+    });
+  }
+
   public async check(identifier: string): Promise<RateLimitInfo> {
-    const currentWindow = Math.floor(Date.now() / this.window);
+    const currentWindow = Math.floor(Date.now() / this.windowMilliseconds);
     const currentKey = `${identifier}:${currentWindow}`;
 
     const used = await this.client.get<number>(currentKey) ?? 0;
+    const willResetAt = (currentWindow + 1) * this.windowMilliseconds;
 
     return {
-      window: this.window,
-      limit: this.max,
-      remaining: Math.max(0, this.max - used),
-      resetIn: (currentWindow + 1) * this.window,
+      window: this.windowSeconds,
+      limit: this.maxUnits,
+      remaining: Math.max(0, this.maxUnits - used),
+      resetIn: Math.max(0, willResetAt - Date.now()),
     };
   }
 
@@ -71,15 +80,15 @@ export class SlidingWindowCounter implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.window,
-        limit: this.max,
+        window: this.windowMilliseconds,
+        limit: this.maxUnits,
         remaining: 0,
-        resetIn: bucket.resetAt - now,
+        resetIn: Math.max(0, bucket.resetAt - now),
         pending: Promise.resolve(),
       }
     }
 
-    const currentWindow = Math.floor(now / this.window);
+    const currentWindow = Math.floor(now / this.windowMilliseconds);
     const currentKey = `${identifier}:${currentWindow}`;
 
     const previousWindow = currentWindow - 1;
@@ -93,14 +102,14 @@ export class SlidingWindowCounter implements Algorithm {
       },
       [previousKey, currentKey],
       [
-        this.window.toString(),
-        this.max.toString(),
+        this.windowMilliseconds.toString(),
+        this.maxUnits.toString(),
         cost.toString(),
         now.toString()
       ]
     );
 
-    const resetAt = (currentWindow + 1) * this.window;
+    const resetAt = (currentWindow + 1) * this.windowMilliseconds;
 
     if (!allowed) {
       this.cache.blockUntil(identifier, resetAt);
@@ -108,15 +117,15 @@ export class SlidingWindowCounter implements Algorithm {
 
     return {
       allowed: Boolean(allowed),
-      window: this.window,
-      limit: this.max,
+      window: this.windowSeconds,
+      limit: this.maxUnits,
       remaining,
-      resetIn: resetAt - Date.now(),
+      resetIn: Math.max(0, resetAt - now),
       pending: Promise.resolve(),
     }
   }
 
-  public async refund(identifier: string, value: number): Promise<Pick<RateLimitInfo, 'remaining'>> {
+  public async refund(identifier: string, value: number): Promise<number> {
     const used = await this.client.eval<[string], number>(
       refundScript,
       [identifier],
@@ -129,9 +138,7 @@ export class SlidingWindowCounter implements Algorithm {
       })
     }
 
-    return {
-      remaining: this.max - used,
-    }
+    return this.maxUnits - used;
   }
 
   public async reset(identifier: string): Promise<void> {

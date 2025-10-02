@@ -1,7 +1,7 @@
-import { BlockedCache } from '../../cache';
+import { MemoryCache } from '../../cache';
 import { LimiterError } from '../../errors';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
-import type { Algorithm, RedisClient } from '../types';
+import type { Algorithm, RedisClient, Store } from '../types';
 import { safeEval } from '../utils';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
@@ -13,34 +13,31 @@ type TokenBucketOptions = {
   max: number;
   interval: number;
   rate: number;
-  cache?: Map<string, number>;
 }
 
 export class TokenBucket implements Algorithm {
+  public readonly policyName: 'token-bucket';
+
   private readonly client: RedisClient;
+  private readonly cache: MemoryCache;
 
-  private readonly cache: BlockedCache;
-
-  public readonly max: number;
+  public readonly maxUnits: number;
   private readonly interval: number;
   private readonly rate: number;
 
   private readonly incrementScriptSha: Promise<string>;
 
-  constructor(client: RedisClient, options: TokenBucketOptions) {
-    this.client = client;
+  constructor(store: Store, options: TokenBucketOptions) {
+    this.policyName = 'token-bucket';
 
-    const cache = options.cache instanceof Map
-      ? options.cache
-      : new Map();
-
-    this.cache = new BlockedCache(cache);
+    this.client = store.client;
+    this.cache = store.blockedCache;
 
     if (options.max < 0) {
       throw new LimiterError('Max quota units must be positive integer');
     }
 
-    this.max = options.max;
+    this.maxUnits = options.max;
 
     if (options.interval < 1) {
       throw new LimiterError('Refill interval seconds must be nonzero');
@@ -62,14 +59,14 @@ export class TokenBucket implements Algorithm {
     const bucket = await this.client.hmget<Record<string, number>>(identifier, 'tokens', 'refilled_at');
 
     const {
-      tokens = this.max,
+      tokens = this.maxUnits,
       refilled_at = Date.now(),
     } = bucket ?? {};
 
     return {
       window: this.interval,
-      limit: this.max,
-      remaining: tokens ?? this.max,
+      limit: this.maxUnits,
+      remaining: tokens ?? this.maxUnits,
       resetIn: refilled_at + this.interval,
     };
   }
@@ -82,7 +79,7 @@ export class TokenBucket implements Algorithm {
       return {
         allowed: false,
         window: this.interval,
-        limit: this.max,
+        limit: this.maxUnits,
         remaining: 0,
         resetIn: bucket.resetAt - Date.now(),
         pending: Promise.resolve(),
@@ -101,7 +98,7 @@ export class TokenBucket implements Algorithm {
       },
       [identifier],
       [
-        this.max.toString(),
+        this.maxUnits.toString(),
         this.interval.toString(),
         this.rate.toString(),
         cost.toString(),
@@ -116,26 +113,24 @@ export class TokenBucket implements Algorithm {
     return {
       allowed: Boolean(allowed),
       window: this.interval,
-      limit: this.max,
+      limit: this.maxUnits,
       remaining,
       resetIn: resetAt - Date.now(),
       pending: Promise.resolve(),
     };
   }
 
-  public async refund(identifier: string, value: number): Promise<Pick<RateLimitInfo, 'remaining'>> {
+  public async refund(identifier: string, value: number): Promise<number> {
     const remaining = await this.client.eval<[string, string], number>(
       refundScript,
       [identifier],
       [
-        this.max.toString(),
+        this.maxUnits.toString(),
         value.toString(),
       ]
     );
 
-    return {
-      remaining,
-    };
+    return remaining;
   }
 
   public async reset(identifier: string): Promise<void> {

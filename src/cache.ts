@@ -1,6 +1,6 @@
 
-export class BlockedCache {
-  private cache: Map<string, number>;
+export class MemoryCache {
+  private readonly cache: Map<string, number>;
 
   constructor(cache?: Map<string, number>) {
     this.cache = cache instanceof Map ? cache : new Map();

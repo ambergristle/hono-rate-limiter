@@ -1,7 +1,7 @@
-import { BlockedCache } from '../../cache';
+import { MemoryCache } from '../../cache';
 import { LimiterError } from '../../errors';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
-import type { Algorithm, RedisClient } from '../types';
+import type { Algorithm, RedisClient, Store } from '../types';
 import { safeEval } from '../utils';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
@@ -10,33 +10,30 @@ import resetScript from './scripts/reset.lua' with { type: "text" };
 type FixedWindowCounterOptions = {
   max: number;
   window: number;
-  cache?: Map<string, number>;
 }
 
 export class FixedWindowCounter implements Algorithm {
+  public readonly policyName: 'fixed-window';
+
   private readonly client: RedisClient;
+  private readonly cache: MemoryCache;
 
-  private readonly cache: BlockedCache;
-
-  public readonly max: number;
+  public readonly maxUnits: number;
   public readonly window: number;
 
   private incrementScriptSha: Promise<string>;
 
-  constructor(client: RedisClient, options: FixedWindowCounterOptions) {
-    this.client = client;
+  constructor(store: Store, options: FixedWindowCounterOptions) {
+    this.policyName = 'fixed-window';
 
-    const cache = options.cache instanceof Map
-      ? options.cache
-      : new Map();
-
-    this.cache = new BlockedCache(cache);
+    this.client = store.client;
+    this.cache = store.blockedCache;
 
     if (options.max < 0) {
       throw new LimiterError('Max quota units must be positive integer');
     }
 
-    this.max = options.max;
+    this.maxUnits = options.max;
 
     if (options.window < 1) {
       throw new LimiterError('Window seconds must be nonzero');
@@ -55,8 +52,8 @@ export class FixedWindowCounter implements Algorithm {
 
     return {
       window: this.window,
-      limit: this.max,
-      remaining: Math.max(0, this.max - used),
+      limit: this.maxUnits,
+      remaining: Math.max(0, this.maxUnits - used),
       resetIn: (currentWindow + 1) * this.window,
     };
   }
@@ -67,7 +64,7 @@ export class FixedWindowCounter implements Algorithm {
       return {
         allowed: false,
         window: this.window,
-        limit: this.max,
+        limit: this.maxUnits,
         remaining: 0,
         resetIn: bucket.resetAt - Date.now(),
         pending: Promise.resolve(),
@@ -90,7 +87,7 @@ export class FixedWindowCounter implements Algorithm {
       ],
     );
 
-    const allowed = used <= this.max;
+    const allowed = used <= this.maxUnits;
     const resetAt = (currentWindow + 1) * this.window;
 
     if (!allowed) {
@@ -100,14 +97,14 @@ export class FixedWindowCounter implements Algorithm {
     return {
       allowed,
       window: this.window,
-      limit: this.max,
-      remaining: Math.max(0, this.max - used),
+      limit: this.maxUnits,
+      remaining: Math.max(0, this.maxUnits - used),
       resetIn: resetAt - Date.now(),
       pending: Promise.resolve(),
     };
   }
 
-  public async refund(identifier: string, value: number): Promise<Pick<RateLimitInfo, 'remaining'>> {
+  public async refund(identifier: string, value: number): Promise<number> {
 
     const currentWindow = Math.floor(Date.now() / this.window);
     const key = [identifier, currentWindow].join(":");
@@ -118,9 +115,7 @@ export class FixedWindowCounter implements Algorithm {
       [value.toString()],
     );
 
-    return {
-      remaining: this.max - used,
-    };
+    return this.maxUnits - used;
   }
 
   public async reset(identifier: string) {
@@ -130,4 +125,5 @@ export class FixedWindowCounter implements Algorithm {
       [null],
     );
   }
+
 }
