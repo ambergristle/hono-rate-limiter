@@ -1,5 +1,5 @@
 
-const hash = async (script: string) => {
+const hash = async (script: string): Promise<string> => {
   const encoded = new TextEncoder().encode(script);
   const hashed = await crypto.subtle.digest('SHA-1', encoded);
 

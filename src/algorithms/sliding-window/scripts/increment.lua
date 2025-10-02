@@ -32,4 +32,4 @@ if currentCount == cost then
   redis.call("PEXPIRE", currentKey, overlap)
 end
 
-return {true, max - approximated}
+return {true, max - approximated - cost}

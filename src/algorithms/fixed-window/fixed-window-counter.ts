@@ -1,7 +1,10 @@
 import { BlockedCache } from '../../cache';
+import { LimiterError } from '../../errors';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
 import type { Algorithm, RedisClient } from '../types';
+import { safeEval } from '../utils';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
+import refundScript from './scripts/refund.lua' with { type: "text" };
 import resetScript from './scripts/reset.lua' with { type: "text" };
 
 type FixedWindowCounterOptions = {
@@ -29,7 +32,16 @@ export class FixedWindowCounter implements Algorithm {
 
     this.cache = new BlockedCache(cache);
 
+    if (options.max < 0) {
+      throw new LimiterError('Max quota units must be positive integer');
+    }
+
     this.max = options.max;
+
+    if (options.window < 1) {
+      throw new LimiterError('Window seconds must be nonzero');
+    }
+
     this.window = options.window * 1000;
 
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
@@ -49,7 +61,7 @@ export class FixedWindowCounter implements Algorithm {
     };
   }
 
-  public async consume(identifier: string, cost: number): Promise<RateLimitResult> {
+  public async consume(identifier: string, cost = 1): Promise<RateLimitResult> {
     const bucket = this.cache.isBlocked(identifier);
     if (bucket.blocked) {
       return {
@@ -65,8 +77,12 @@ export class FixedWindowCounter implements Algorithm {
     const currentWindow = Math.floor(Date.now() / this.window);
     const key = [identifier, currentWindow].join(":");
 
-    const used = await this.client.evalsha<[string, string], number>(
-      await this.incrementScriptSha,
+    const used = await safeEval<[string, string], number>(
+      this.client,
+      {
+        hash: await this.incrementScriptSha,
+        script: incrementScript,
+      },
       [key],
       [
         this.window.toString(),
@@ -92,7 +108,16 @@ export class FixedWindowCounter implements Algorithm {
   }
 
   public async refund(identifier: string, value: number): Promise<Pick<RateLimitInfo, 'remaining'>> {
-    const used = await this.client.decrby(identifier, value);
+
+    const currentWindow = Math.floor(Date.now() / this.window);
+    const key = [identifier, currentWindow].join(":");
+
+    const used = await this.client.eval<[string], number>(
+      refundScript,
+      [key],
+      [value.toString()],
+    );
+
     return {
       remaining: this.max - used,
     };
@@ -102,7 +127,7 @@ export class FixedWindowCounter implements Algorithm {
     await this.client.eval(
       resetScript,
       [identifier],
-      [], // null?
+      [null],
     );
   }
 }

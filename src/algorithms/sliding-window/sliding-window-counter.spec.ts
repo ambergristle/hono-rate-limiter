@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { Redis } from '@upstash/redis';
 import { LimiterError } from '../../errors';
-import { FixedWindowCounter } from './fixed-window-counter';
+import { SlidingWindowCounter } from './sliding-window-counter';
 
 const WINDOW = 5;
 const LIMIT = 1;
@@ -18,7 +18,7 @@ beforeAll(() => {
 describe('configuration', () => {
 
   test('requires max requests >= 0', () => {
-    const cb = () => new FixedWindowCounter(client, {
+    const cb = () => new SlidingWindowCounter(client, {
       max: -1,
       window: WINDOW,
     });
@@ -27,7 +27,7 @@ describe('configuration', () => {
   });
 
   test('requires window duration > 0', () => {
-    const cb = () => new FixedWindowCounter(client, {
+    const cb = () => new SlidingWindowCounter(client, {
       max: LIMIT,
       window: 0,
     });
@@ -39,9 +39,9 @@ describe('configuration', () => {
 
 describe('behavior', () => {
 
-  let algo: FixedWindowCounter;
+  let algo: SlidingWindowCounter;
   beforeEach(() => {
-    algo = new FixedWindowCounter(client, {
+    algo = new SlidingWindowCounter(client, {
       window: WINDOW,
       max: LIMIT,
     });
@@ -113,7 +113,7 @@ describe('behavior', () => {
     }, (WINDOW + 1) * 1000);
 
     test('rejects all requests if max=0', async () => {
-      algo = new FixedWindowCounter(client, {
+      algo = new SlidingWindowCounter(client, {
         window: 30,
         max: 0,
       });
@@ -127,7 +127,7 @@ describe('behavior', () => {
   });
 
   // describe('', () => {
-  //   test('burst possible at boundaries', () => { });
+  //   test('smooth across boundaries', () => { });
   // })
 
   test('check method returns current rate limit info', async () => {
@@ -148,7 +148,7 @@ describe('behavior', () => {
   test('refund method restores quota units', async () => {
     const identifier = crypto.randomUUID();
 
-    const r = await algo.consume(identifier, COST);
+    await algo.consume(identifier, COST);
     await algo.refund(identifier, COST);
 
     const result = await algo.check(identifier);
@@ -166,5 +166,3 @@ describe('behavior', () => {
   });
 
 });
-
-

@@ -1,9 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { Redis } from '@upstash/redis';
 import { LimiterError } from '../../errors';
-import { FixedWindowCounter } from './fixed-window-counter';
+import { TokenBucket } from './token-bucket';
 
-const WINDOW = 5;
+const INTERVAL = 5;
 const LIMIT = 1;
 const COST = 1;
 
@@ -17,19 +17,31 @@ beforeAll(() => {
 
 describe('configuration', () => {
 
-  test('requires max requests >= 0', () => {
-    const cb = () => new FixedWindowCounter(client, {
-      max: -1,
-      window: WINDOW,
+  test('requires window duration > 0', () => {
+    const cb = () => new TokenBucket(client, {
+      max: LIMIT,
+      interval: 0,
+      rate: COST,
     });
 
     expect(cb).toThrowError(LimiterError);
   });
 
-  test('requires window duration > 0', () => {
-    const cb = () => new FixedWindowCounter(client, {
+  test('requires max requests >= 0', () => {
+    const cb = () => new TokenBucket(client, {
+      max: -1,
+      interval: INTERVAL,
+      rate: COST,
+    });
+
+    expect(cb).toThrowError(LimiterError);
+  });
+
+  test('requires refill rate > 0', () => {
+    const cb = () => new TokenBucket(client, {
       max: LIMIT,
-      window: 0,
+      interval: INTERVAL,
+      rate: 0,
     });
 
     expect(cb).toThrowError(LimiterError);
@@ -39,11 +51,12 @@ describe('configuration', () => {
 
 describe('behavior', () => {
 
-  let algo: FixedWindowCounter;
+  let algo: TokenBucket;
   beforeEach(() => {
-    algo = new FixedWindowCounter(client, {
-      window: WINDOW,
+    algo = new TokenBucket(client, {
       max: LIMIT,
+      interval: INTERVAL,
+      rate: COST,
     });
   });
 
@@ -52,11 +65,11 @@ describe('behavior', () => {
     test('returns rate limit info and limiter result', async () => {
       const identifier = crypto.randomUUID();
 
-      const result = await algo.consume(identifier, COST);
+      const result = await algo.consume(identifier);
 
       expect(result).toEqual({
         allowed: true,
-        window: WINDOW * 1000,
+        window: INTERVAL * 1000,
         limit: LIMIT,
         remaining: LIMIT - COST,
         resetIn: expect.any(Number),
@@ -68,7 +81,7 @@ describe('behavior', () => {
       const identifier = crypto.randomUUID();
 
       for (let i = 0; i < LIMIT + 1; i++) {
-        const result = await algo.consume(identifier, COST);
+        const result = await algo.consume(identifier);
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -79,14 +92,14 @@ describe('behavior', () => {
 
       let resetIn = 30 * 1000;
       for (let i = 0; i < LIMIT + 1; i++) {
-        const result = await algo.consume(identifier, COST);
+        const result = await algo.consume(identifier);
         resetIn = result.resetIn;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
 
       setTimeout(async () => {
-        const result = await algo.consume(identifier, COST);
+        const result = await algo.consume(identifier);
         expect(result.allowed).toBe(true);
       }, resetIn)
     });
@@ -94,9 +107,9 @@ describe('behavior', () => {
     test('works consistently', async () => {
       const identifier = crypto.randomUUID();
 
-      let resetIn = WINDOW * 1000;
+      let resetIn = INTERVAL * 1000;
       for (let i = 0; i < LIMIT + 1; i++) {
-        const result = await algo.consume(identifier, COST);
+        const result = await algo.consume(identifier);
         resetIn = result.resetIn;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
@@ -105,21 +118,22 @@ describe('behavior', () => {
       await new Promise((r) => setTimeout(r, resetIn))
 
       for (let i = 0; i < LIMIT + 1; i++) {
-        const result = await algo.consume(identifier, COST);
+        const result = await algo.consume(identifier);
         resetIn = result.resetIn;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
-    }, (WINDOW + 1) * 1000);
+    }, (INTERVAL + 1) * 1000);
 
     test('rejects all requests if max=0', async () => {
-      algo = new FixedWindowCounter(client, {
-        window: 30,
+      algo = new TokenBucket(client, {
         max: 0,
+        interval: INTERVAL,
+        rate: COST,
       });
 
       const identifier = crypto.randomUUID();
-      const result = await algo.consume(identifier, COST);
+      const result = await algo.consume(identifier);
       expect(result.allowed).toBe(false);
       expect(result.limit).toBe(0);
     });
@@ -127,18 +141,19 @@ describe('behavior', () => {
   });
 
   // describe('', () => {
-  //   test('burst possible at boundaries', () => { });
+  //   test('refill rate', () => { });
+  //   test('burst capacity', () => { });
   // })
 
   test('check method returns current rate limit info', async () => {
     const identifier = crypto.randomUUID();
 
-    const consumeResult = await algo.consume(identifier, COST);
-    expect(consumeResult.remaining).toBe(LIMIT - COST);
+    const consumeResult = await algo.consume(identifier);
+    expect(consumeResult.remaining).toBe(LIMIT - 1);
 
     const checkResult = await algo.check(identifier);
     expect(checkResult).toEqual({
-      window: WINDOW * 1000,
+      window: INTERVAL * 1000,
       limit: LIMIT,
       remaining: LIMIT - COST,
       resetIn: expect.any(Number),
@@ -148,7 +163,7 @@ describe('behavior', () => {
   test('refund method restores quota units', async () => {
     const identifier = crypto.randomUUID();
 
-    const r = await algo.consume(identifier, COST);
+    const r = await algo.consume(identifier);
     await algo.refund(identifier, COST);
 
     const result = await algo.check(identifier);
@@ -158,7 +173,7 @@ describe('behavior', () => {
   test('reset method deletes identifier bucket', async () => {
     const identifier = crypto.randomUUID();
 
-    await algo.consume(identifier, COST);
+    await algo.consume(identifier);
     await algo.reset(identifier);
 
     const bucket = await client.get(identifier);
@@ -166,5 +181,3 @@ describe('behavior', () => {
   });
 
 });
-
-

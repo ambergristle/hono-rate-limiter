@@ -1,23 +1,36 @@
 local id = KEYS[1]
-local value = tonumber(ARGS[1])
+local value = tonumber(ARGV[1])
 
 local cursor = "0"
-local keys = {}
+local matchingKeys = {}
 
 repeat
   local result = redis.call("SCAN", cursor, "MATCH", id .. "*")
+  cursor = result[1]
 
-  cursor = result[0]
-
-  for _, v in pairs() do
-    table.insert(keys, v)
+  local keys = result[2]
+  if type(keys) == "table" then
+    for k, v in ipairs(keys) do
+      table.insert(matchingKeys, v)
+    end
+  elseif type(keys) == "string" then
+    table.insert(matchingKeys, keys)
   end
-
+  
 until cursor == "0"
 
-if #keys <= 0 do
-  return -1
+if (#matchingKeys < 1) then
+  return 0
 end
 
-table.sort(keys)
-return redis.call("DECRBY", keys[-1], value)
+table.sort(matchingKeys)
+local key = matchingKeys[#matchingKeys]
+
+local count = redis.call("GET", key)
+if count == 0 then
+  return 0
+end
+
+count = math.max(0, count - value)
+
+return redis.call("SET", matchingKeys[#matchingKeys], value)

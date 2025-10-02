@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import type { RateLimitResult } from './types';
+import { LimiterError } from './errors';
 
 type RateLimitInfoV8 = RateLimitResult & {
   policyName: string;
@@ -25,8 +26,12 @@ export const setHeaders = async (
       return await draft8(c, info);
     }
     default:
-      throw new Error(`Invalid draft key: ${draft}`);
+      throw new LimiterError('Invalid header spec draft');
   }
+}
+
+export const supportedDrafts = () => {
+  return [6, 7, 8].map((d) => `draft-${d}`);
 }
 
 /**

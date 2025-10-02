@@ -5,6 +5,7 @@ import resetScript from './scripts/reset.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
 import { BlockedCache } from '../../cache';
 import { safeEval } from '../utils';
+import { LimiterError } from '../../errors';
 
 type IncrementArgs = [string, string, string, string];
 type IncrementData = [number, number];
@@ -34,7 +35,16 @@ export class SlidingWindowCounter implements Algorithm {
 
     this.cache = new BlockedCache(cache);
 
+    if (options.max < 0) {
+      throw new LimiterError('Max quota units must be positive integer');
+    }
+
     this.max = options.max;
+
+    if (options.window < 1) {
+      throw new LimiterError('Window seconds must be nonzero');
+    }
+
     this.window = options.window * 1000;
 
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
@@ -54,7 +64,7 @@ export class SlidingWindowCounter implements Algorithm {
     };
   }
 
-  public async consume(identifier: string, cost: number): Promise<RateLimitResult> {
+  public async consume(identifier: string, cost = 1): Promise<RateLimitResult> {
     const now = Date.now();
 
     const bucket = this.cache.isBlocked(identifier);
@@ -112,6 +122,12 @@ export class SlidingWindowCounter implements Algorithm {
       [identifier],
       [value.toString()],
     );
+
+    if (used === -1) {
+      throw new LimiterError('Invalid identifier', {
+        cause: { identifier },
+      })
+    }
 
     return {
       remaining: this.max - used,

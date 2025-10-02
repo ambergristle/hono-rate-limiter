@@ -1,3 +1,4 @@
+local key    = KEYS[1]
 local window = tonumber(ARGV[1])
 local now    = tonumber(ARGV[2])
 

@@ -1,81 +1,75 @@
 
-### todo
+## Current State
 
-- what's up wth the policy name? what's a good default?
-- argument validation
-- on error callback
-
-- set retry-after header
-- add warning log if `c.finalized` before headers are set?
-- rate limit info (+ policy + id)
-- pk generation
-  https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-08#section-5.1
-
-- null value required for reset eval call?
-- does the wildcard need to be in the refund, reset match fns?
-
-- handle dynamic cost window log
-- cache
-- handle multiple/variable refunds
+- how do refund or reset handle invalid ids?
+  - refund is weird. i don't think it should fail. just not go over max?
+  - reset just deletes matching keys; doesn't care about invalid
+    - should ensure multiple limiters don't overwrite keys
+- test cache
+- test middleware
+- format and policy naming stuff
+- package
+- design more comprehensive test?
 
 ## tests
-- config
-- refund
-- reset
-- introspect
 
-### middleware
-- headers
-- error response
+[] headers
 
-## definitions
+[] cache
 
-- quota: capacity allocated to client requests, measured in quota units
-- 
+middleware
+  [] configuration (validate required arguments and outputs)
+  [] headers
+  [] error response
 
+algorithms
+  [] configuration (validate required arguments and outputs)
+  [] basic
+    - returns rate limit info and limiter result'
+    - blocks after limit exceeded
+    - allows additional requests after reset
+    * works consistently (this is a weak test)
+    - rejects all requests if max=0
+  [] specific
+  [] check: check method returns current rate limit info
+  [] refund: refund method restores quota units
+  [] reset: reset method deletes identifier bucket
+  performance
+    [] response time
+    [] resource use
+  - concurrent requests
+  - multiple users (limits isolated per id)
+  - configurable windows
 
-// fixed window
-rate = max / window
-rate = 2 * max / window
+## Roadmap
 
-// sliding window counter
-rate = max / window
-rate = 1.5 * max / window
+- error enhancements; storage errors?
 
-// sliding window log
-rate = max / window
+#### format
+- naming
+- divide remaining by cost?
+- resetIn to seconds?
 
-// token bucket
-rate = rps
-rate = max + (rps * interval) / interval
-rate = max + rps * burst
-// empty -> full then stream
+#### support multiple policies in rate limit header
+- should be simple enough, code-wise
+- what's up wth the policy name? what's a good default?
 
+#### research pk generation
+- should it be abstracted?
+- https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-08#section-5.1
 
-RegionRatelimit.fixedWindow(tc.rps * (tc.rate ?? 1), windowString)
+#### reset all
 
-fixedWindow(max, window)
+#### deny list
 
-in the context of the sliding window counter
-  - max is how many they can have (rps * cost)
+### Future
 
-RegionRatelimit.slidingWindow(tc.rps * (tc.rate ?? 1), windowString)
+#### safe load scripts
+- look into prehashing, should be ez
+- preload less likely scripts
 
-slidingWindow(max, window)
+#### dynamic cost window log
+- doesn't obviously make sense, poses some serious technical challenges
 
-in the context of the sliding window counter
-  - max is how many they can have (rps * cost)
-
-
-RegionRatelimit.tokenBucket(tc.rps, windowString, tc.rps * (tc.rate ?? 1))
-
-tokenBucket(rate, interval, max)
-
-in the context of the token bucket
-  - rps is how often tokens are refilled
-  - max is how many they can have (rps * cost)
-
-
-
-a rate limiter enforces a consistent rate, ig?
-
+#### dynamic refunds
+- only required if limiter is untethered from middleware

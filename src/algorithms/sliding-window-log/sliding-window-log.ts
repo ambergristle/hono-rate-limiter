@@ -1,4 +1,5 @@
 import { BlockedCache } from '../../cache';
+import { LimiterError } from '../../errors';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
 import { Algorithm, RedisClient } from '../types';
 import { safeEval } from '../utils';
@@ -35,7 +36,16 @@ export class SlidingWindowLog implements Algorithm {
 
     this.cache = new BlockedCache(cache);
 
+    if (options.max < 0) {
+      throw new LimiterError('Max quota units must be positive integer');
+    }
+
     this.max = options.max;
+
+    if (options.window < 1) {
+      throw new LimiterError('Window seconds must be nonzero');
+    }
+
     this.window = options.window * 1000;
 
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
@@ -47,7 +57,7 @@ export class SlidingWindowLog implements Algorithm {
 
     const used = await this.client.evalsha<[string, string], number>(
       await this.introspectScriptSha,
-      [],
+      [identifier],
       [
         this.window.toString(),
         now.toString(),
