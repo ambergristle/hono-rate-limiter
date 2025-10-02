@@ -8,8 +8,8 @@ import refundScript from './scripts/refund.lua' with { type: "text" };
 import resetScript from './scripts/reset.lua' with { type: "text" };
 
 type FixedWindowCounterOptions = {
-  max: number;
-  window: number;
+  maxUnits: number;
+  windowSeconds: number;
 }
 
 export class FixedWindowCounter implements Algorithm {
@@ -19,7 +19,7 @@ export class FixedWindowCounter implements Algorithm {
   private readonly cache: MemoryCache;
 
   public readonly maxUnits: number;
-  public readonly window: number;
+  public readonly windowSeconds: number;
 
   private incrementScriptSha: Promise<string>;
 
@@ -29,32 +29,37 @@ export class FixedWindowCounter implements Algorithm {
     this.client = store.client;
     this.cache = store.blockedCache;
 
-    if (options.max < 0) {
+    if (options.maxUnits < 0) {
       throw new LimiterError('Max quota units must be positive integer');
     }
 
-    this.maxUnits = options.max;
+    this.maxUnits = options.maxUnits;
 
-    if (options.window < 1) {
+    if (options.windowSeconds < 1) {
       throw new LimiterError('Window seconds must be nonzero');
     }
 
-    this.window = options.window * 1000;
+    this.windowSeconds = options.windowSeconds;
 
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
   }
 
+  private get windowMilliseconds(): number {
+    return this.windowSeconds * 1000;
+  }
+
   public async check(identifier: string): Promise<RateLimitInfo> {
-    const currentWindow = Math.floor(Date.now() / this.window);
+    const currentWindow = Math.floor(Date.now() / this.windowMilliseconds);
     const key = [identifier, currentWindow].join(":");
 
-    const used = await this.client.get<number>(key) ?? 0;
+    const count = await this.client.get<number>(key) ?? 0;
+    const resetAt = (currentWindow + 1) * this.windowMilliseconds;
 
     return {
-      window: this.window,
+      window: this.windowSeconds,
       limit: this.maxUnits,
-      remaining: Math.max(0, this.maxUnits - used),
-      resetIn: (currentWindow + 1) * this.window,
+      remaining: Math.max(0, this.maxUnits - count),
+      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
     };
   }
 
@@ -63,18 +68,18 @@ export class FixedWindowCounter implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.window,
+        window: this.windowSeconds,
         limit: this.maxUnits,
         remaining: 0,
-        resetIn: bucket.resetAt - Date.now(),
+        resetIn: Math.ceil((bucket.resetAt - Date.now()) / 1000),
         pending: Promise.resolve(),
       }
     }
 
-    const currentWindow = Math.floor(Date.now() / this.window);
+    const currentWindow = Math.floor(Date.now() / this.windowMilliseconds);
     const key = [identifier, currentWindow].join(":");
 
-    const used = await safeEval<[string, string], number>(
+    const count = await safeEval<[string, string], number>(
       this.client,
       {
         hash: await this.incrementScriptSha,
@@ -82,13 +87,13 @@ export class FixedWindowCounter implements Algorithm {
       },
       [key],
       [
-        this.window.toString(),
+        this.windowMilliseconds.toString(),
         cost.toString(),
       ],
     );
 
-    const allowed = used <= this.maxUnits;
-    const resetAt = (currentWindow + 1) * this.window;
+    const allowed = count <= this.maxUnits;
+    const resetAt = (currentWindow + 1) * this.windowMilliseconds;
 
     if (!allowed) {
       this.cache.blockUntil(identifier, resetAt);
@@ -96,26 +101,26 @@ export class FixedWindowCounter implements Algorithm {
 
     return {
       allowed,
-      window: this.window,
+      window: this.windowSeconds,
       limit: this.maxUnits,
-      remaining: Math.max(0, this.maxUnits - used),
-      resetIn: resetAt - Date.now(),
+      remaining: Math.max(0, this.maxUnits - count),
+      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
       pending: Promise.resolve(),
     };
   }
 
   public async refund(identifier: string, value: number): Promise<number> {
 
-    const currentWindow = Math.floor(Date.now() / this.window);
+    const currentWindow = Math.floor(Date.now() / this.windowMilliseconds);
     const key = [identifier, currentWindow].join(":");
 
-    const used = await this.client.eval<[string], number>(
+    const count = await this.client.eval<[string], number>(
       refundScript,
       [key],
       [value.toString()],
     );
 
-    return this.maxUnits - used;
+    return this.maxUnits - count;
   }
 
   public async reset(identifier: string) {

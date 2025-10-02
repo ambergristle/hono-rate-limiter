@@ -10,9 +10,9 @@ type IncrementArgs = [string, string, string, string, string];
 type IncrementData = [number, number, number];
 
 type TokenBucketOptions = {
-  max: number;
-  interval: number;
-  rate: number;
+  maxUnits: number;
+  intervalSeconds: number;
+  refillRate: number;
 }
 
 export class TokenBucket implements Algorithm {
@@ -22,8 +22,8 @@ export class TokenBucket implements Algorithm {
   private readonly cache: MemoryCache;
 
   public readonly maxUnits: number;
-  private readonly interval: number;
-  private readonly rate: number;
+  private readonly intervalSeconds: number;
+  private readonly refillRate: number;
 
   private readonly incrementScriptSha: Promise<string>;
 
@@ -33,25 +33,29 @@ export class TokenBucket implements Algorithm {
     this.client = store.client;
     this.cache = store.blockedCache;
 
-    if (options.max < 0) {
+    if (options.maxUnits < 0) {
       throw new LimiterError('Max quota units must be positive integer');
     }
 
-    this.maxUnits = options.max;
+    this.maxUnits = options.maxUnits;
 
-    if (options.interval < 1) {
+    if (options.intervalSeconds < 1) {
       throw new LimiterError('Refill interval seconds must be nonzero');
     }
 
-    this.interval = options.interval * 1000;
+    this.intervalSeconds = options.intervalSeconds;
 
-    if (options.rate <= 0) {
+    if (options.refillRate <= 0) {
       throw new LimiterError('Refill interval rate must be nonzero');
     }
 
-    this.rate = options.rate;
+    this.refillRate = options.refillRate;
 
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
+  }
+
+  private get intervalMilliseconds(): number {
+    return this.intervalSeconds * 1000;
   }
 
   public async check(identifier: string): Promise<RateLimitInfo> {
@@ -63,11 +67,13 @@ export class TokenBucket implements Algorithm {
       refilled_at = Date.now(),
     } = bucket ?? {};
 
+    const resetAt = refilled_at + this.intervalMilliseconds;
+
     return {
-      window: this.interval,
+      window: this.intervalSeconds,
       limit: this.maxUnits,
       remaining: tokens ?? this.maxUnits,
-      resetIn: refilled_at + this.interval,
+      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
     };
   }
 
@@ -78,10 +84,10 @@ export class TokenBucket implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.interval,
+        window: this.intervalSeconds,
         limit: this.maxUnits,
         remaining: 0,
-        resetIn: bucket.resetAt - Date.now(),
+        resetIn: Math.ceil((bucket.resetAt - Date.now()) / 1000),
         pending: Promise.resolve(),
       }
     }
@@ -99,8 +105,8 @@ export class TokenBucket implements Algorithm {
       [identifier],
       [
         this.maxUnits.toString(),
-        this.interval.toString(),
-        this.rate.toString(),
+        this.intervalMilliseconds.toString(),
+        this.refillRate.toString(),
         cost.toString(),
         now.toString(),
       ],
@@ -112,10 +118,10 @@ export class TokenBucket implements Algorithm {
 
     return {
       allowed: Boolean(allowed),
-      window: this.interval,
+      window: this.intervalSeconds,
       limit: this.maxUnits,
       remaining,
-      resetIn: resetAt - Date.now(),
+      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
       pending: Promise.resolve(),
     };
   }

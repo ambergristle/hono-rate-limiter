@@ -47,7 +47,7 @@ export class SlidingWindowCounter implements Algorithm {
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
   }
 
-  private get windowMilliseconds() {
+  private get windowMilliseconds(): number {
     return this.windowSeconds * 1000;
   }
 
@@ -62,14 +62,14 @@ export class SlidingWindowCounter implements Algorithm {
     const currentWindow = Math.floor(Date.now() / this.windowMilliseconds);
     const currentKey = `${identifier}:${currentWindow}`;
 
-    const used = await this.client.get<number>(currentKey) ?? 0;
-    const willResetAt = (currentWindow + 1) * this.windowMilliseconds;
+    const count = await this.client.get<number>(currentKey) ?? 0;
+    const resetAt = (currentWindow + 1) * this.windowMilliseconds;
 
     return {
       window: this.windowSeconds,
       limit: this.maxUnits,
-      remaining: Math.max(0, this.maxUnits - used),
-      resetIn: Math.max(0, willResetAt - Date.now()),
+      remaining: Math.max(0, this.maxUnits - count),
+      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
     };
   }
 
@@ -80,10 +80,10 @@ export class SlidingWindowCounter implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.windowMilliseconds,
+        window: this.windowSeconds,
         limit: this.maxUnits,
         remaining: 0,
-        resetIn: Math.max(0, bucket.resetAt - now),
+        resetIn: Math.ceil((bucket.resetAt - Date.now()) / 1000),
         pending: Promise.resolve(),
       }
     }
@@ -120,32 +120,26 @@ export class SlidingWindowCounter implements Algorithm {
       window: this.windowSeconds,
       limit: this.maxUnits,
       remaining,
-      resetIn: Math.max(0, resetAt - now),
+      resetIn: Math.ceil((resetAt - now) / 1000),
       pending: Promise.resolve(),
     }
   }
 
   public async refund(identifier: string, value: number): Promise<number> {
-    const used = await this.client.eval<[string], number>(
+    const count = await this.client.eval<[string], number>(
       refundScript,
       [identifier],
       [value.toString()],
     );
 
-    if (used === -1) {
-      throw new LimiterError('Invalid identifier', {
-        cause: { identifier },
-      })
-    }
-
-    return this.maxUnits - used;
+    return this.maxUnits - count;
   }
 
   public async reset(identifier: string): Promise<void> {
     await this.client.eval(
       resetScript,
       [identifier],
-      [], // null?
+      [null],
     );
   }
 }

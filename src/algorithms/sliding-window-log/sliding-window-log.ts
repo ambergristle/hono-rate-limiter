@@ -11,8 +11,8 @@ type IncrementArgs = [string, string, string];
 type IncrementData = [number, number];
 
 type SlidingWindowLogOptions = {
-  max: number;
-  window: number;
+  maxUnits: number;
+  windowSeconds: number;
 }
 
 export class SlidingWindowLog implements Algorithm {
@@ -22,7 +22,7 @@ export class SlidingWindowLog implements Algorithm {
   private readonly cache: MemoryCache;
 
   public readonly maxUnits: number;
-  public readonly window: number;
+  public readonly windowSeconds: number;
 
   private incrementScriptSha: Promise<string>;
   private introspectScriptSha: Promise<string>;
@@ -33,39 +33,43 @@ export class SlidingWindowLog implements Algorithm {
     this.client = store.client;
     this.cache = store.blockedCache;
 
-    if (options.max < 0) {
+    if (options.maxUnits < 0) {
       throw new LimiterError('Max quota units must be positive integer');
     }
 
-    this.maxUnits = options.max;
+    this.maxUnits = options.maxUnits;
 
-    if (options.window < 1) {
+    if (options.windowSeconds < 1) {
       throw new LimiterError('Window seconds must be nonzero');
     }
 
-    this.window = options.window * 1000;
+    this.windowSeconds = options.windowSeconds;
 
     this.incrementScriptSha = this.client.scriptLoad(incrementScript);
     this.introspectScriptSha = this.client.scriptLoad(introspectScript);
   }
 
+  private get windowMilliseconds(): number {
+    return this.windowSeconds * 1000;
+  }
+
   public async check(identifier: string): Promise<RateLimitInfo> {
     const now = Date.now();
 
-    const used = await this.client.evalsha<[string, string], number>(
+    const count = await this.client.evalsha<[string, string], number>(
       await this.introspectScriptSha,
       [identifier],
       [
-        this.window.toString(),
+        this.windowMilliseconds.toString(),
         now.toString(),
       ]
     );
 
     return {
-      window: this.window,
+      window: this.windowSeconds,
       limit: this.maxUnits,
-      remaining: Math.max(0, this.maxUnits - used),
-      resetIn: this.window,
+      remaining: Math.max(0, this.maxUnits - count),
+      resetIn: this.windowSeconds,
     };
   }
 
@@ -76,10 +80,10 @@ export class SlidingWindowLog implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.window,
+        window: this.windowSeconds,
         limit: this.maxUnits,
         remaining: 0,
-        resetIn: bucket.resetAt - now,
+        resetIn: Math.ceil((bucket.resetAt - now) / 1000),
         pending: Promise.resolve(),
       }
     }
@@ -93,21 +97,21 @@ export class SlidingWindowLog implements Algorithm {
       [identifier],
       [
         this.maxUnits.toString(),
-        this.window.toString(),
+        this.windowMilliseconds.toString(),
         now.toString(),
       ],
     );
 
     if (!allowed) {
-      this.cache.blockUntil(identifier, Date.now() + this.window);
+      this.cache.blockUntil(identifier, Date.now() + this.windowMilliseconds);
     }
 
     return {
       allowed: Boolean(allowed),
-      window: this.window,
+      window: this.windowSeconds,
       limit: this.maxUnits,
       remaining,
-      resetIn: this.window,
+      resetIn: this.windowSeconds,
       pending: Promise.resolve(),
     }
   }
