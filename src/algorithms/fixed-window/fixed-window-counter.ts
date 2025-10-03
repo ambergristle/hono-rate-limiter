@@ -56,10 +56,12 @@ export class FixedWindowCounter implements Algorithm {
     const resetAt = (currentWindow + 1) * this.windowMilliseconds;
 
     return {
-      window: this.windowSeconds,
-      limit: this.maxUnits,
-      remaining: Math.max(0, this.maxUnits - count),
-      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
+      policyName: this.policyName,
+      identifier,
+      windowSeconds: this.windowSeconds,
+      maxUnits: this.maxUnits,
+      remainingUnits: Math.max(0, this.maxUnits - count),
+      resetInSeconds: Math.ceil((resetAt - Date.now()) / 1000),
     };
   }
 
@@ -68,10 +70,12 @@ export class FixedWindowCounter implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.windowSeconds,
-        limit: this.maxUnits,
-        remaining: 0,
-        resetIn: Math.ceil((bucket.resetAt - Date.now()) / 1000),
+        policyName: this.policyName,
+        identifier,
+        windowSeconds: this.windowSeconds,
+        maxUnits: this.maxUnits,
+        remainingUnits: 0,
+        resetInSeconds: Math.ceil((bucket.resetAt - Date.now()) / 1000),
         pending: Promise.resolve(),
       }
     }
@@ -101,10 +105,12 @@ export class FixedWindowCounter implements Algorithm {
 
     return {
       allowed,
-      window: this.windowSeconds,
-      limit: this.maxUnits,
-      remaining: Math.max(0, this.maxUnits - count),
-      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
+      policyName: this.policyName,
+      identifier,
+      windowSeconds: this.windowSeconds,
+      maxUnits: this.maxUnits,
+      remainingUnits: Math.max(0, this.maxUnits - count),
+      resetInSeconds: Math.ceil((resetAt - Date.now()) / 1000),
       pending: Promise.resolve(),
     };
   }

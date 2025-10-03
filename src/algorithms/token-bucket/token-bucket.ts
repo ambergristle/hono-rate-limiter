@@ -70,10 +70,12 @@ export class TokenBucket implements Algorithm {
     const resetAt = refilled_at + this.intervalMilliseconds;
 
     return {
-      window: this.intervalSeconds,
-      limit: this.maxUnits,
-      remaining: tokens ?? this.maxUnits,
-      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
+      policyName: this.policyName,
+      identifier,
+      windowSeconds: this.intervalSeconds,
+      maxUnits: this.maxUnits,
+      remainingUnits: tokens ?? this.maxUnits,
+      resetInSeconds: Math.ceil((resetAt - Date.now()) / 1000),
     };
   }
 
@@ -84,17 +86,19 @@ export class TokenBucket implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.intervalSeconds,
-        limit: this.maxUnits,
-        remaining: 0,
-        resetIn: Math.ceil((bucket.resetAt - Date.now()) / 1000),
+        policyName: this.policyName,
+        identifier,
+        windowSeconds: this.intervalSeconds,
+        maxUnits: this.maxUnits,
+        remainingUnits: 0,
+        resetInSeconds: Math.ceil((bucket.resetAt - Date.now()) / 1000),
         pending: Promise.resolve(),
       }
     }
 
     const [
       allowed,
-      remaining,
+      remainingUnits,
       resetAt
     ] = await safeEval<IncrementArgs, IncrementData>(
       this.client,
@@ -118,10 +122,12 @@ export class TokenBucket implements Algorithm {
 
     return {
       allowed: Boolean(allowed),
-      window: this.intervalSeconds,
-      limit: this.maxUnits,
-      remaining,
-      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
+      policyName: this.policyName,
+      identifier,
+      windowSeconds: this.intervalSeconds,
+      maxUnits: this.maxUnits,
+      remainingUnits,
+      resetInSeconds: Math.ceil((resetAt - Date.now()) / 1000),
       pending: Promise.resolve(),
     };
   }

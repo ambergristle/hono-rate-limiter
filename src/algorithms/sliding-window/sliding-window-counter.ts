@@ -66,10 +66,12 @@ export class SlidingWindowCounter implements Algorithm {
     const resetAt = (currentWindow + 1) * this.windowMilliseconds;
 
     return {
-      window: this.windowSeconds,
-      limit: this.maxUnits,
-      remaining: Math.max(0, this.maxUnits - count),
-      resetIn: Math.ceil((resetAt - Date.now()) / 1000),
+      policyName: this.policyName,
+      identifier,
+      windowSeconds: this.windowSeconds,
+      maxUnits: this.maxUnits,
+      remainingUnits: Math.max(0, this.maxUnits - count),
+      resetInSeconds: Math.ceil((resetAt - Date.now()) / 1000),
     };
   }
 
@@ -80,10 +82,12 @@ export class SlidingWindowCounter implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.windowSeconds,
-        limit: this.maxUnits,
-        remaining: 0,
-        resetIn: Math.ceil((bucket.resetAt - Date.now()) / 1000),
+        policyName: this.policyName,
+        identifier,
+        windowSeconds: this.windowSeconds,
+        maxUnits: this.maxUnits,
+        remainingUnits: 0,
+        resetInSeconds: Math.ceil((bucket.resetAt - Date.now()) / 1000),
         pending: Promise.resolve(),
       }
     }
@@ -94,7 +98,7 @@ export class SlidingWindowCounter implements Algorithm {
     const previousWindow = currentWindow - 1;
     const previousKey = `${identifier}:${previousWindow}`;
 
-    const [allowed, remaining] = await safeEval<IncrementArgs, IncrementData>(
+    const [allowed, remainingUnits] = await safeEval<IncrementArgs, IncrementData>(
       this.client,
       {
         hash: await this.incrementScriptSha,
@@ -117,10 +121,12 @@ export class SlidingWindowCounter implements Algorithm {
 
     return {
       allowed: Boolean(allowed),
-      window: this.windowSeconds,
-      limit: this.maxUnits,
-      remaining,
-      resetIn: Math.ceil((resetAt - now) / 1000),
+      policyName: this.policyName,
+      identifier,
+      windowSeconds: this.windowSeconds,
+      maxUnits: this.maxUnits,
+      remainingUnits,
+      resetInSeconds: Math.ceil((resetAt - now) / 1000),
       pending: Promise.resolve(),
     }
   }

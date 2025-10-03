@@ -66,10 +66,12 @@ export class SlidingWindowLog implements Algorithm {
     );
 
     return {
-      window: this.windowSeconds,
-      limit: this.maxUnits,
-      remaining: Math.max(0, this.maxUnits - count),
-      resetIn: this.windowSeconds,
+      policyName: this.policyName,
+      identifier,
+      windowSeconds: this.windowSeconds,
+      maxUnits: this.maxUnits,
+      remainingUnits: Math.max(0, this.maxUnits - count),
+      resetInSeconds: this.windowSeconds,
     };
   }
 
@@ -80,15 +82,17 @@ export class SlidingWindowLog implements Algorithm {
     if (bucket.blocked) {
       return {
         allowed: false,
-        window: this.windowSeconds,
-        limit: this.maxUnits,
-        remaining: 0,
-        resetIn: Math.ceil((bucket.resetAt - now) / 1000),
+        policyName: this.policyName,
+        identifier,
+        windowSeconds: this.windowSeconds,
+        maxUnits: this.maxUnits,
+        remainingUnits: 0,
+        resetInSeconds: Math.ceil((bucket.resetAt - now) / 1000),
         pending: Promise.resolve(),
       }
     }
 
-    const [allowed, remaining] = await safeEval<IncrementArgs, IncrementData>(
+    const [allowed, remainingUnits] = await safeEval<IncrementArgs, IncrementData>(
       this.client,
       {
         hash: await this.incrementScriptSha,
@@ -108,10 +112,12 @@ export class SlidingWindowLog implements Algorithm {
 
     return {
       allowed: Boolean(allowed),
-      window: this.windowSeconds,
-      limit: this.maxUnits,
-      remaining,
-      resetIn: this.windowSeconds,
+      policyName: this.policyName,
+      identifier,
+      windowSeconds: this.windowSeconds,
+      maxUnits: this.maxUnits,
+      remainingUnits,
+      resetInSeconds: this.windowSeconds,
       pending: Promise.resolve(),
     }
   }
