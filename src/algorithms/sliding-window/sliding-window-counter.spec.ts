@@ -58,10 +58,12 @@ describe('behavior', () => {
 
       expect(result).toEqual({
         allowed: true,
-        window: WINDOW * 1000,
-        limit: LIMIT,
-        remaining: LIMIT - COST,
-        resetIn: expect.any(Number),
+        policyName: 'sliding-window',
+        identifier,
+        windowSeconds: WINDOW * 1000,
+        maxUnits: LIMIT,
+        remainingUnits: LIMIT - COST,
+        resetInSeconds: expect.any(Number),
         pending: expect.any(Promise),
       });
     });
@@ -82,7 +84,7 @@ describe('behavior', () => {
       let resetIn = 30 * 1000;
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier, COST);
-        resetIn = result.resetIn;
+        resetIn = result.resetInSeconds * 1000;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -99,7 +101,7 @@ describe('behavior', () => {
       let resetIn = WINDOW * 1000;
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier, COST);
-        resetIn = result.resetIn;
+        resetIn = result.resetInSeconds * 1000;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -108,7 +110,6 @@ describe('behavior', () => {
 
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier, COST);
-        resetIn = result.resetIn;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -123,7 +124,7 @@ describe('behavior', () => {
       const identifier = crypto.randomUUID();
       const result = await algo.consume(identifier, COST);
       expect(result.allowed).toBe(false);
-      expect(result.limit).toBe(0);
+      expect(result.maxUnits).toBe(0);
     });
 
   });
@@ -136,14 +137,16 @@ describe('behavior', () => {
     const identifier = crypto.randomUUID();
 
     const consumeResult = await algo.consume(identifier, COST);
-    expect(consumeResult.remaining).toBe(LIMIT - COST);
+    expect(consumeResult.remainingUnits).toBe(LIMIT - COST);
 
     const checkResult = await algo.check(identifier);
     expect(checkResult).toEqual({
-      window: WINDOW * 1000,
-      limit: LIMIT,
-      remaining: LIMIT - COST,
-      resetIn: expect.any(Number),
+      policyName: 'sliding-window',
+      identifier,
+      windowSeconds: WINDOW * 1000,
+      maxUnits: LIMIT,
+      remainingUnits: LIMIT - COST,
+      resetInSeconds: expect.any(Number),
     });
   });
 
@@ -154,7 +157,7 @@ describe('behavior', () => {
     await algo.refund(identifier, COST);
 
     const result = await algo.check(identifier);
-    expect(result.remaining).toBe(LIMIT);
+    expect(result.remainingUnits).toBe(LIMIT);
   });
 
   test('reset method deletes identifier bucket', async () => {

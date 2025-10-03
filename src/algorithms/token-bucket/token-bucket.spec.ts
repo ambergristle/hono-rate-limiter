@@ -21,9 +21,9 @@ describe('configuration', () => {
 
   test('requires window duration > 0', () => {
     const cb = () => new TokenBucket(store, {
-      max: LIMIT,
-      interval: 0,
-      rate: COST,
+      maxUnits: LIMIT,
+      intervalSeconds: 0,
+      refillRate: COST,
     });
 
     expect(cb).toThrowError(LimiterError);
@@ -31,9 +31,9 @@ describe('configuration', () => {
 
   test('requires max requests >= 0', () => {
     const cb = () => new TokenBucket(store, {
-      max: -1,
-      interval: INTERVAL,
-      rate: COST,
+      maxUnits: -1,
+      intervalSeconds: INTERVAL,
+      refillRate: COST,
     });
 
     expect(cb).toThrowError(LimiterError);
@@ -41,9 +41,9 @@ describe('configuration', () => {
 
   test('requires refill rate > 0', () => {
     const cb = () => new TokenBucket(store, {
-      max: LIMIT,
-      interval: INTERVAL,
-      rate: 0,
+      maxUnits: LIMIT,
+      intervalSeconds: INTERVAL,
+      refillRate: 0,
     });
 
     expect(cb).toThrowError(LimiterError);
@@ -56,9 +56,9 @@ describe('behavior', () => {
   let algo: TokenBucket;
   beforeEach(() => {
     algo = new TokenBucket(store, {
-      max: LIMIT,
-      interval: INTERVAL,
-      rate: COST,
+      maxUnits: LIMIT,
+      intervalSeconds: INTERVAL,
+      refillRate: COST,
     });
   });
 
@@ -71,10 +71,12 @@ describe('behavior', () => {
 
       expect(result).toEqual({
         allowed: true,
-        window: INTERVAL * 1000,
-        limit: LIMIT,
-        remaining: LIMIT - COST,
-        resetIn: expect.any(Number),
+        policyName: 'token-bucket',
+        identifier,
+        windowSeconds: INTERVAL * 1000,
+        maxUnits: LIMIT,
+        remainingUnits: LIMIT - COST,
+        resetInSeconds: expect.any(Number),
         pending: expect.any(Promise),
       });
     });
@@ -95,7 +97,7 @@ describe('behavior', () => {
       let resetIn = 30 * 1000;
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier);
-        resetIn = result.resetIn;
+        resetIn = result.resetInSeconds * 1000;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -112,7 +114,7 @@ describe('behavior', () => {
       let resetIn = INTERVAL * 1000;
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier);
-        resetIn = result.resetIn;
+        resetIn = result.resetInSeconds * 1000;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -121,7 +123,6 @@ describe('behavior', () => {
 
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier);
-        resetIn = result.resetIn;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -129,15 +130,15 @@ describe('behavior', () => {
 
     test('rejects all requests if max=0', async () => {
       algo = new TokenBucket(store, {
-        max: 0,
-        interval: INTERVAL,
-        rate: COST,
+        maxUnits: 0,
+        intervalSeconds: INTERVAL,
+        refillRate: COST,
       });
 
       const identifier = crypto.randomUUID();
       const result = await algo.consume(identifier);
       expect(result.allowed).toBe(false);
-      expect(result.limit).toBe(0);
+      expect(result.maxUnits).toBe(0);
     });
 
   });
@@ -151,14 +152,16 @@ describe('behavior', () => {
     const identifier = crypto.randomUUID();
 
     const consumeResult = await algo.consume(identifier);
-    expect(consumeResult.remaining).toBe(LIMIT - 1);
+    expect(consumeResult.maxUnits).toBe(LIMIT - 1);
 
     const checkResult = await algo.check(identifier);
     expect(checkResult).toEqual({
-      window: INTERVAL * 1000,
-      limit: LIMIT,
-      remaining: LIMIT - COST,
-      resetIn: expect.any(Number),
+      policyName: 'token-bucket',
+      identifier,
+      windowSeconds: INTERVAL * 1000,
+      maxUnits: LIMIT,
+      remainingUnits: LIMIT - COST,
+      resetInSeconds: expect.any(Number),
     });
   });
 
@@ -169,7 +172,7 @@ describe('behavior', () => {
     await algo.refund(identifier, COST);
 
     const result = await algo.check(identifier);
-    expect(result.remaining).toBe(LIMIT);
+    expect(result.remainingUnits).toBe(LIMIT);
   });
 
   test('reset method deletes identifier bucket', async () => {

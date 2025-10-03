@@ -21,8 +21,8 @@ describe('configuration', () => {
 
   test('requires max requests >= 0', () => {
     const cb = () => new SlidingWindowLog(store, {
-      max: -1,
-      window: WINDOW,
+      maxUnits: -1,
+      windowSeconds: WINDOW,
     });
 
     expect(cb).toThrowError(LimiterError);
@@ -30,8 +30,8 @@ describe('configuration', () => {
 
   test('requires window duration > 0', () => {
     const cb = () => new SlidingWindowLog(store, {
-      max: LIMIT,
-      window: 0,
+      maxUnits: LIMIT,
+      windowSeconds: 0,
     });
 
     expect(cb).toThrowError(LimiterError);
@@ -44,8 +44,8 @@ describe('behavior', () => {
   let algo: SlidingWindowLog;
   beforeEach(() => {
     algo = new SlidingWindowLog(store, {
-      window: WINDOW,
-      max: LIMIT,
+      windowSeconds: WINDOW,
+      maxUnits: LIMIT,
     });
   });
 
@@ -58,10 +58,12 @@ describe('behavior', () => {
 
       expect(result).toEqual({
         allowed: true,
-        window: WINDOW * 1000,
-        limit: LIMIT,
-        remaining: LIMIT - COST,
-        resetIn: expect.any(Number),
+        policyName: 'sliding-window-log',
+        identifier,
+        windowSeconds: WINDOW * 1000,
+        maxUnits: LIMIT,
+        remainingUnits: LIMIT - COST,
+        resetInSeconds: expect.any(Number),
         pending: expect.any(Promise),
       });
     });
@@ -82,7 +84,7 @@ describe('behavior', () => {
       let resetIn = 30 * 1000;
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier);
-        resetIn = result.resetIn;
+        resetIn = result.resetInSeconds * 1000;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -99,7 +101,7 @@ describe('behavior', () => {
       let resetIn = WINDOW * 1000;
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier);
-        resetIn = result.resetIn;
+        resetIn = result.resetInSeconds * 1000;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -108,7 +110,6 @@ describe('behavior', () => {
 
       for (let i = 0; i < LIMIT + 1; i++) {
         const result = await algo.consume(identifier);
-        resetIn = result.resetIn;
         const allowed = i < LIMIT;
         expect(result.allowed).toBe(allowed);
       }
@@ -116,14 +117,14 @@ describe('behavior', () => {
 
     test('rejects all requests if max=0', async () => {
       algo = new SlidingWindowLog(store, {
-        window: 30,
-        max: 0,
+        windowSeconds: 30,
+        maxUnits: 0,
       });
 
       const identifier = crypto.randomUUID();
       const result = await algo.consume(identifier);
       expect(result.allowed).toBe(false);
-      expect(result.limit).toBe(0);
+      expect(result.maxUnits).toBe(0);
     });
 
   });
@@ -136,14 +137,16 @@ describe('behavior', () => {
     const identifier = crypto.randomUUID();
 
     const consumeResult = await algo.consume(identifier);
-    expect(consumeResult.remaining).toBe(LIMIT - 1);
+    expect(consumeResult.remainingUnits).toBe(LIMIT - 1);
 
     const checkResult = await algo.check(identifier);
     expect(checkResult).toEqual({
-      window: WINDOW * 1000,
-      limit: LIMIT,
-      remaining: LIMIT - COST,
-      resetIn: expect.any(Number),
+      policyName: 'sliding-window-log',
+      identifier,
+      windowSeconds: WINDOW * 1000,
+      maxUnits: LIMIT,
+      remainingUnits: LIMIT - COST,
+      resetInSeconds: expect.any(Number),
     });
   });
 
@@ -154,7 +157,7 @@ describe('behavior', () => {
     await algo.refund(identifier);
 
     const result = await algo.check(identifier);
-    expect(result.remaining).toBe(LIMIT);
+    expect(result.remainingUnits).toBe(LIMIT);
   });
 
   test('reset method deletes identifier bucket', async () => {
