@@ -3,7 +3,6 @@ import { Redis } from "@upstash/redis";
 import { RateLimiter } from "./limiter";
 import { SlidingWindowCounter } from "./algorithms/sliding-window/sliding-window-counter";
 
-
 test("cache", async () => {
   const maxTokens = 5;
   const client = Redis.fromEnv();
@@ -20,14 +19,16 @@ test("cache", async () => {
   })
 
   const blockedCache = new Map<string, number>();
-  const ratelimit = new RateLimiter({
+
+
+  const rateLimit = new RateLimiter({
     client: proxy,
     algorithm: SlidingWindowCounter.init(maxTokens, 60),
     blockedCache,
     keyPrefix: 'limit',
   });
 
-  const consumeSpy = spyOn(ratelimit, 'consume');
+  const consumeSpy = spyOn(rateLimit, 'consume');
 
   let reqs = 0;
   let ok = 0;
@@ -35,7 +36,7 @@ test("cache", async () => {
   const identifier = crypto.randomUUID();
   for (let i = 0; i <= maxTokens + 1; i++) {
     reqs++
-    const { allowed } = await ratelimit.consume(identifier);
+    const { allowed } = await rateLimit.consume(identifier);
     expect(allowed).toBe(i < maxTokens);
     if (allowed) {
       ok++
