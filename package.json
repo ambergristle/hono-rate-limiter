@@ -5,10 +5,10 @@
 	"author": "ambergristle",
 	"private": false,
 	"license": "MIT",
-	"homepage": "https://github.com/sponsors/ambergristle/hono-rate-limiter",
+	"homepage": "https://github.com/ambergristle/hono-rate-limiter",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/sponsors/ambergristle/hono-rate-limiter"
+		"url": "https://github.com/ambergristle/hono-rate-limiter"
 	},
 	"funding": "https://github.com/sponsors/ambergristle",
 	"keywords": [
