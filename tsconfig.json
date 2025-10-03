@@ -1,16 +1,33 @@
 {
   "compilerOptions": {
-    "target": "es2022",
-    "declaration": true,
-    "module": "esnext",
+    // environment
+    "lib": ["esnext"], //
+    "types": ["@types/bun"],
+    "target": "esnext",
+    "module": "preserve", //
+    "moduleDetection": "force", //
+    "allowJs": true,
+
+    // bundler
     "moduleResolution": "bundler",
     "esModuleInterop": true,
-    "outDir": "./dist",
+    "verbatimModuleSyntax": true, //
     "allowArbitraryExtensions": true,
+
+    // best practices
     "strict": true,
     "skipLibCheck": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["@types/bun"]
+
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    // output
+    "declaration": true,
+    "outDir": "./dist"
   },
   "include": [
     "src/**/*.ts",

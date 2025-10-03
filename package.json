@@ -1,16 +1,56 @@
 {
-	"name": "hono-rate-limiter",
-	"version": "0.0.0",
+	"name": "@ambergristle/hono-rate-limiter",
+	"version": "0.0.1",
+	"description": "Basic rate limiting for Hono, featuring a variety of algorithms",
 	"author": "ambergristle",
-	"main": "index.js",
-	"description": "",
-	"keywords": [],
-	"license": "MIT",
 	"private": false,
-	"scripts": {},
+	"license": "MIT",
+	"homepage": "https://github.com/sponsors/ambergristle/hono-rate-limiter",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/sponsors/ambergristle/hono-rate-limiter"
+	},
+	"funding": "https://github.com/sponsors/ambergristle",
+	"keywords": [
+		"hono",
+		"rate",
+		"limit",
+		"ratelimit",
+		"rate-limit",
+		"middleware",
+		"ip",
+		"fixed-window",
+		"sliding-window",
+		"token-bucket",
+		"auth",
+		"authorization",
+		"security",
+		"brute",
+		"force",
+		"bruteforce",
+		"brute-force",
+		"attack"
+	],
+	"type": "module",
+	"main": "/dist/index.js",
+	"exports": null,
+	"module": "",
+	"types": "",
+	"files": [],
+	"engines": {},
+	"scripts": {
+		"build": "bun build ./src/index.ts --outdir ./dist --target=node",
+		"test": "bun test ./src",
+		"format": "echo \"Error: not implemented\" && exit 1",
+		"lint": "echo \"Error: not implemented\" && exit 1",
+		"prepare": "echo \"Error: not implemented\" && exit 1"
+	},
+	"peerDependencies": {
+		"hono": ">= 4.7.4"
+	},
 	"devDependencies": {
-		"hono": "4.7.4",
-		"@types/bun": "^1.2.17"
+		"@types/bun": "^1.2.17",
+		"hono": "^4.9.9"
 	},
 	"dependencies": {
 		"@upstash/redis": "^1.35.4"
