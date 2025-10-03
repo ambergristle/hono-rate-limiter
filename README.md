@@ -1,21 +1,20 @@
 
 ## Current State
-
-- how do refund or reset handle invalid ids?
-  - refund is weird. i don't think it should fail. just not go over max?
-  - reset just deletes matching keys; doesn't care about invalid
-    - should ensure multiple limiters don't overwrite keys
-- test cache
-- test middleware
-- format and policy naming stuff
 - package
+  - https://www.freecodecamp.org/news/how-to-create-and-publish-your-first-npm-package/
+  - https://docs.github.com/en/actions/tutorials/publish-packages/publish-nodejs-packages
+  - https://nodejs.org/en/learn/modules/publishing-a-package
+  - https://medium.com/@kadampritesh46/how-to-publish-your-own-npm-package-a-step-by-step-guide-ff385fbfb246
+  - https://docs.npmjs.com/creating-and-publishing-scoped-public-packages
+  - https://www.w3schools.com/nodejs/nodejs_publish_package.asp
+  - https://dev.to/martinpersson/create-and-publish-your-first-npm-package-a-comprehensive-guide-3l0a
 - design more comprehensive test?
 
 ## tests
 
-[] headers
+[x] headers
 
-[] cache
+[x] cache
 
 middleware
   [] configuration (validate required arguments and outputs)
@@ -23,17 +22,22 @@ middleware
   [] error response
 
 algorithms
-  [] configuration (validate required arguments and outputs)
-  [] basic
-    - returns rate limit info and limiter result'
-    - blocks after limit exceeded
-    - allows additional requests after reset
-    * works consistently (this is a weak test)
-    - rejects all requests if max=0
+  [x] configuration (validate required arguments and outputs)
+  [x] basic
+    [x] returns rate limit info and limiter result'
+    [x] blocks after limit exceeded
+    [x] allows additional requests after reset
+    [x] works consistently (this is a weak test)
+    [x] rejects all requests if max=0
   [] specific
-  [] check: check method returns current rate limit info
-  [] refund: refund method restores quota units
-  [] reset: reset method deletes identifier bucket
+    [] fixed doubled at boundaries
+    [] sliding smooth at boundaries
+    [] log exact
+    [] bucket? burst and rate
+  [x] check: check method returns current rate limit info
+  [x] refund: refund method restores quota units
+  [x] reset: reset method deletes identifier bucket
+
   performance
     [] response time
     [] resource use
@@ -48,11 +52,6 @@ algorithms
 #### format
 - naming
 - divide remaining by cost?
-- resetIn to seconds?
-
-#### support multiple policies in rate limit header
-- should be simple enough, code-wise
-- what's up wth the policy name? what's a good default?
 
 #### research pk generation
 - should it be abstracted?
