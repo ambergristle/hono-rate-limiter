@@ -1,25 +1,18 @@
 import type { Context, Env, MiddlewareHandler } from 'hono';
 import type { Algorithm } from './algorithms/types';
-import { setHeaders } from './headers';
-import { MaybePromise } from './types';
-import { Limiter } from './limiter';
+import { setHeaders, updateInfoHeaders } from './headers';
+import { LimiterEnv, MaybePromise } from './types';
+import { RateLimiter } from './limiter';
 import { LimiterError } from './errors';
 
 type RateLimiterOptions<
   E extends Env,
-  O extends unknown,
-  N extends string,
   R extends Response
 > = {
-  /** @default 'limiter' */
-  name?: N,
-  limiter: Limiter<O> | ((c: Context<E>) => MaybePromise<Limiter<O>>);
-  algo: Algorithm | ((c: Context<E>) => MaybePromise<Algorithm>);
+  limiter: RateLimiter | ((c: Context<E>) => MaybePromise<RateLimiter>);
   /** @default 1 */
   cost?: number;
   generateKey: (c: Context<E>) => MaybePromise<string>;
-  /** @default 'limit' */
-  prefix?: string;
   /** @default 'draft-8' */
   headerSpec?: 'draft-6' | 'draft-7' | 'draft-8';
   refundFailedRequests?: boolean;
@@ -28,19 +21,13 @@ type RateLimiterOptions<
 
 export const rateLimiter = <
   E extends Env,
-  O extends unknown,
-  R extends Response,
-  N extends string = 'limiter',
->(options: RateLimiterOptions<E, O, N, R>): MiddlewareHandler<{
-  Variables: { [key in N]: any }
-}> => {
+  R extends Response = Response,
+>(options: RateLimiterOptions<E, R>): MiddlewareHandler<LimiterEnv> => {
 
   const {
-    name = 'limiter' as N,
-    limiter,
+    limiter: getLimiter,
     cost = 1,
     generateKey,
-    prefix = 'limit',
     headerSpec = 'draft-8',
     refundFailedRequests,
     errorResponse,
@@ -55,23 +42,20 @@ export const rateLimiter = <
   })
 
   return async (c, next) => {
-    const identifier = `${prefix}:${await generateKey(c as any)}`;
+    const identifier = await generateKey(c as any);
 
-    const _limiter = typeof limiter === 'function'
-      ? await limiter(c as any)
-      : limiter;
+    const limiter = typeof getLimiter === 'function'
+      ? await getLimiter(c as any)
+      : getLimiter;
 
-    const rateLimitInfo = await _limiter.consume(identifier, cost);
+    const rateLimitInfo = await limiter.consume(identifier, cost);
+
+    const limiterId = crypto.randomUUID();
+    if (headerSpec) {
+      await setHeaders(c, limiterId, headerSpec, rateLimitInfo);
+    }
 
     if (!rateLimitInfo.allowed) {
-      if (headerSpec) {
-        setHeaders(c, headerSpec, {
-          ...rateLimitInfo,
-          identifier,
-          policyName: name,
-        });
-      }
-
       return _errorResponse(c);
     }
 
@@ -79,16 +63,10 @@ export const rateLimiter = <
 
     const requestFailed = c.res.status > 400;
     if (requestFailed && refundFailedRequests) {
-      const { remaining } = await _limiter.refund(identifier, cost);
-      rateLimitInfo.remaining = remaining;
-    }
-
-    if (headerSpec) {
-      setHeaders(c, headerSpec, {
-        ...rateLimitInfo,
-        identifier,
-        policyName: name,
-      });
+      const remainingUnits = await limiter.refund(identifier, cost);
+      if (headerSpec) {
+        await updateInfoHeaders(c, limiterId, remainingUnits);
+      }
     }
   }
 };
