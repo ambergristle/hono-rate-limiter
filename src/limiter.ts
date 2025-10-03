@@ -1,4 +1,4 @@
-import { Algorithm, AlgorithmConstructor, RedisClient } from './algorithms/types';
+import type { Algorithm, AlgorithmConstructor, RedisClient } from './algorithms/types';
 import { LimiterError } from './errors';
 import type { RateLimitInfo, RateLimitResult } from './types';
 import { MemoryCache } from './cache';
@@ -72,15 +72,15 @@ export class RateLimiter {
     }
   }
 
-  public async resetAll(): Promise<void> {
-    try {
-      const pattern = this.keyPrefix
-        ? `${this.keyPrefix}:${this.policyName}`
-        : this.policyName;
+  // public async resetAll(): Promise<void> {
+  //   try {
+  //     const pattern = this.keyPrefix
+  //       ? `${this.keyPrefix}:${this.policyName}`
+  //       : this.policyName;
 
-      // search and delete
-    } catch (cause) {
-      throw new LimiterError('Rate Limit reset failed', { cause });
-    }
-  }
+  //     // search and delete
+  //   } catch (cause) {
+  //     throw new LimiterError('Rate Limit reset failed', { cause });
+  //   }
+  // }
 }

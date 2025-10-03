@@ -1,14 +1,9 @@
-import { beforeEach, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { getPartitionKey, setHeaders, updateInfoHeaders } from '../src/headers';
-import { LimiterEnv } from './types';
+import type { LimiterEnv } from './types';
 
-let app: Hono<LimiterEnv>;
-beforeEach(() => {
-  app = new Hono<LimiterEnv>()
-});
-
-const info = {
+const INFO = {
   allowed: true,
   policyName: 'basic',
   identifier: 'test-id',
@@ -19,170 +14,185 @@ const info = {
   pending: Promise.resolve(),
 };
 
-test('sets draft-6 headers', async () => {
-  app.get('/', async (c) => {
-    await setHeaders(c, crypto.randomUUID(), 'draft-6', info);
-    return c.body(null, 200);
+describe('setHeaders', () => {
+  let app: Hono<LimiterEnv>;
+  beforeEach(() => {
+    app = new Hono<LimiterEnv>()
   });
 
-  const { headers } = await app.request('/');
-
-  expect(headers.get('RateLimit-Policy')).toBe(`${info.maxUnits};w=${info.windowSeconds}`);
-
-  expect(headers.get('RateLimit-Limit')).toBe(`${info.maxUnits}`);
-  expect(headers.get('RateLimit-Remaining')).toBe(`${info.remainingUnits}`);
-  expect(headers.get('RateLimit-Reset')).toBe(`${info.resetInSeconds}`);
-});
-
-test('sets draft-7 headers', async () => {
-  app.get('/', async (c) => {
-    await setHeaders(c, crypto.randomUUID(), 'draft-7', info);
-    return c.body(null, 200);
-  });
-
-  const { headers } = await app.request('/');
-
-  expect(headers.get('RateLimit-Policy')).toBe(`${info.maxUnits};w=${info.windowSeconds}`);
-
-  expect(headers.get('RateLimit'))
-    .toBe(`limit=${info.maxUnits}, remaining=${info.remainingUnits}, reset=${info.resetInSeconds}`);
-});
-
-test('sets draft-8 headers', async () => {
-  app.get('/', async (c) => {
-    await setHeaders(c, crypto.randomUUID(), 'draft-8', info);
-    return c.body(null, 200);
-  });
-
-  const { headers } = await app.request('/');
-
-  const partitionKey = await getPartitionKey(info.identifier);
-  const policy = `q=${info.maxUnits};w=${info.windowSeconds};pk=:${partitionKey}:`;
-  expect(headers.get('RateLimit-Policy')).toBe(`"${info.policyName}";${policy}`);
-
-  const header = `r=${info.remainingUnits};t=${info.resetInSeconds}`;
-  expect(headers.get('RateLimit')).toBe(`"${info.policyName}";${header}`);
-});
-
-test('sets retry-after header on blocked requests', async () => {
-  app.get('/', async (c) => {
-    await setHeaders(c, crypto.randomUUID(), 'draft-8', {
-      ...info,
-      allowed: false,
-    });
-    return c.body(null, 200);
-  });
-
-  const { headers } = await app.request('/');
-
-  expect(headers.get('Retry-After')).toBe(info.resetInSeconds.toString());
-
-});
-
-test('falls back to first-set draft', async () => {
-  app.get('/', async (c) => {
-    await setHeaders(c, crypto.randomUUID(), 'draft-6', info);
-    await setHeaders(c, crypto.randomUUID(), 'draft-8', info);
-    return c.body(null, 200);
-  });
-
-  const { headers } = await app.request('/');
-
-  const policy = headers.get('RateLimit-Policy');
-  expect(policy).toBeString();
-
-  const policies = policy?.split(', ') ?? '';
-  expect(policies.length).toBe(2);
-
-  // draft-6 spec
-  expect(policies[0]).toBe(`${info.maxUnits};w=${info.windowSeconds}`);
-  expect(headers.get('RateLimit-Remaining')).toBe(`${info.remainingUnits}`);
-});
-
-test('only overwrites info headers if closer to limit', async () => {
-  const REMAINING = 60;
-
-  app.get('/', async (c) => {
-    await setHeaders(c, crypto.randomUUID(), 'draft-6', {
-      ...info,
-      remainingUnits: 70,
+  test('sets draft-6 headers', async () => {
+    app.get('/', async (c) => {
+      await setHeaders(c, crypto.randomUUID(), 'draft-6', INFO);
+      return c.body(null, 200);
     });
 
-    await setHeaders(c, crypto.randomUUID(), 'draft-6', {
-      ...info,
-      remainingUnits: REMAINING,
-    });
+    const { headers } = await app.request('/');
 
-    await setHeaders(c, crypto.randomUUID(), 'draft-6', {
-      ...info,
-      remainingUnits: 80,
-    });
+    expect(headers.get('RateLimit-Policy')).toBe(`${INFO.maxUnits};w=${INFO.windowSeconds}`);
 
-    return c.body(null, 200);
+    expect(headers.get('RateLimit-Limit')).toBe(`${INFO.maxUnits}`);
+    expect(headers.get('RateLimit-Remaining')).toBe(`${INFO.remainingUnits}`);
+    expect(headers.get('RateLimit-Reset')).toBe(`${INFO.resetInSeconds}`);
   });
 
-  const { headers } = await app.request('/');
+  test('sets draft-7 headers', async () => {
+    app.get('/', async (c) => {
+      await setHeaders(c, crypto.randomUUID(), 'draft-7', INFO);
+      return c.body(null, 200);
+    });
 
-  const policy = headers.get('RateLimit-Policy');
-  expect(policy).toBeString();
+    const { headers } = await app.request('/');
 
-  const policies = policy?.split(', ') ?? '';
-  expect(policies.length).toBe(3);
+    expect(headers.get('RateLimit-Policy')).toBe(`${INFO.maxUnits};w=${INFO.windowSeconds}`);
 
-  expect(headers.get('RateLimit-Remaining')).toBe(REMAINING.toString());
+    expect(headers.get('RateLimit'))
+      .toBe(`limit=${INFO.maxUnits}, remaining=${INFO.remainingUnits}, reset=${INFO.resetInSeconds}`);
+  });
+
+  test('sets draft-8 headers', async () => {
+    app.get('/', async (c) => {
+      await setHeaders(c, crypto.randomUUID(), 'draft-8', INFO);
+      return c.body(null, 200);
+    });
+
+    const { headers } = await app.request('/');
+
+    const partitionKey = await getPartitionKey(INFO.identifier);
+    const policy = `q=${INFO.maxUnits};w=${INFO.windowSeconds};pk=:${partitionKey}:`;
+    expect(headers.get('RateLimit-Policy')).toBe(`"${INFO.policyName}";${policy}`);
+
+    const header = `r=${INFO.remainingUnits};t=${INFO.resetInSeconds}`;
+    expect(headers.get('RateLimit')).toBe(`"${INFO.policyName}";${header}`);
+  });
+
+  test('sets retry-after header on blocked requests', async () => {
+    app.get('/', async (c) => {
+      await setHeaders(c, crypto.randomUUID(), 'draft-8', {
+        ...INFO,
+        allowed: false,
+      });
+      return c.body(null, 200);
+    });
+
+    const { headers } = await app.request('/');
+
+    expect(headers.get('Retry-After')).toBe(INFO.resetInSeconds.toString());
+
+  });
+
+  test('falls back to first-set draft', async () => {
+    app.get('/', async (c) => {
+      await setHeaders(c, crypto.randomUUID(), 'draft-6', INFO);
+      await setHeaders(c, crypto.randomUUID(), 'draft-8', INFO);
+      return c.body(null, 200);
+    });
+
+    const { headers } = await app.request('/');
+
+    const policy = headers.get('RateLimit-Policy');
+    expect(policy).toBeString();
+
+    const policies = policy?.split(', ') ?? '';
+    expect(policies.length).toBe(2);
+
+    // draft-6 spec
+    expect(policies[0]).toBe(`${INFO.maxUnits};w=${INFO.windowSeconds}`);
+    expect(headers.get('RateLimit-Remaining')).toBe(`${INFO.remainingUnits}`);
+  });
+
+  test('only overwrites info headers if closer to limit', async () => {
+    const REMAINING = 60;
+
+    app.get('/', async (c) => {
+      await setHeaders(c, crypto.randomUUID(), 'draft-6', {
+        ...INFO,
+        remainingUnits: 70,
+      });
+
+      await setHeaders(c, crypto.randomUUID(), 'draft-6', {
+        ...INFO,
+        remainingUnits: REMAINING,
+      });
+
+      await setHeaders(c, crypto.randomUUID(), 'draft-6', {
+        ...INFO,
+        remainingUnits: 80,
+      });
+
+      return c.body(null, 200);
+    });
+
+    const { headers } = await app.request('/');
+
+    const policy = headers.get('RateLimit-Policy');
+    expect(policy).toBeString();
+
+    const policies = policy?.split(', ') ?? '';
+    expect(policies.length).toBe(3);
+
+    expect(headers.get('RateLimit-Remaining')).toBe(REMAINING.toString());
+
+  });
 
 });
 
-test('updates info headers after refund', async () => {
-  const REMAINING = 90;
-
-  app.get('/', async (c) => {
-    const limiterId = crypto.randomUUID();
-
-    await setHeaders(c, limiterId, 'draft-6', {
-      ...info,
-      remainingUnits: 80,
-    });
-
-    // ... refund
-
-    await updateInfoHeaders(c, limiterId, REMAINING);
-
-    return c.body(null, 200);
+describe('updateInfoHeaders', () => {
+  let app: Hono<LimiterEnv>;
+  beforeEach(() => {
+    app = new Hono<LimiterEnv>()
   });
 
-  const { headers } = await app.request('/');
+  test('updates info headers after refund', async () => {
+    const REMAINING = 90;
 
-  expect(headers.get('RateLimit-Remaining')).toBe(REMAINING.toString());
-});
+    app.get('/', async (c) => {
+      const limiterId = crypto.randomUUID();
 
-test('doesnt update info headers if farther from limit', async () => {
-  const REMAINING = 70;
+      await setHeaders(c, limiterId, 'draft-6', {
+        ...INFO,
+        remainingUnits: 80,
+      });
 
-  app.get('/', async (c) => {
-    const limiterAId = crypto.randomUUID();
-    const limiterBId = crypto.randomUUID();
+      // ... refund
 
-    await setHeaders(c, limiterAId, 'draft-6', {
-      ...info,
-      remainingUnits: 80,
+      await updateInfoHeaders(c, limiterId, REMAINING);
+
+      return c.body(null, 200);
     });
 
-    await setHeaders(c, limiterBId, 'draft-6', {
-      ...info,
-      remainingUnits: 60,
-    });
+    const { headers } = await app.request('/');
 
-    // ... refund
-
-    await updateInfoHeaders(c, limiterBId, REMAINING);
-
-    await updateInfoHeaders(c, limiterAId, 90);
-
-    return c.body(null, 200);
+    expect(headers.get('RateLimit-Remaining')).toBe(REMAINING.toString());
   });
 
-  const { headers } = await app.request('/');
+  test('doesnt update info headers if farther from limit', async () => {
+    const REMAINING = 70;
 
-  expect(headers.get('RateLimit-Remaining')).toBe(REMAINING.toString());
+    app.get('/', async (c) => {
+      const limiterAId = crypto.randomUUID();
+      const limiterBId = crypto.randomUUID();
+
+      await setHeaders(c, limiterAId, 'draft-6', {
+        ...INFO,
+        remainingUnits: 80,
+      });
+
+      await setHeaders(c, limiterBId, 'draft-6', {
+        ...INFO,
+        remainingUnits: 60,
+      });
+
+      // ... refund
+
+      await updateInfoHeaders(c, limiterBId, REMAINING);
+
+      await updateInfoHeaders(c, limiterAId, 90);
+
+      return c.body(null, 200);
+    });
+
+    const { headers } = await app.request('/');
+
+    expect(headers.get('RateLimit-Remaining')).toBe(REMAINING.toString());
+  });
 });

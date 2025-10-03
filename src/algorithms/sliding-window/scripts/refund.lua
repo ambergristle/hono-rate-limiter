@@ -30,7 +30,7 @@ table.sort(matchingKeys)
 local latestKey = matchingKeys[#matchingKeys]
 
 -- get record to prevent over-capacity
-local count = redis.call("GET", latestKey)
+local count = tonumber(redis.call("GET", latestKey))
 -- exit early if at min
 if count == 0 then
   return 0

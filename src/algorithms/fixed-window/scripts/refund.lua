@@ -5,7 +5,13 @@ local value = tonumber(ARGV[1])
 local count = redis.call("GET", key)
 
 -- exit early if no match or bucket empty
-if (count == false or count == 0) then
+if (count == nil) then
+  return 0
+else
+  count = tonumber(count)
+end
+
+if count == 0 then
   return 0
 end
 

@@ -1,7 +1,7 @@
 import { MemoryCache } from '../../cache';
 import { LimiterError } from '../../errors';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
-import { Algorithm, RedisClient, Store } from '../types';
+import type { Algorithm, RedisClient, Store } from '../types';
 import { safeEval } from '../utils';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 import introspectScript from './scripts/introspect.lua' with { type: "text" };
