@@ -1,14 +1,95 @@
 
-## Current State
-- package
-  - https://www.freecodecamp.org/news/how-to-create-and-publish-your-first-npm-package/
-  - https://docs.github.com/en/actions/tutorials/publish-packages/publish-nodejs-packages
-  - https://nodejs.org/en/learn/modules/publishing-a-package
-  - https://medium.com/@kadampritesh46/how-to-publish-your-own-npm-package-a-step-by-step-guide-ff385fbfb246
-  - https://docs.npmjs.com/creating-and-publishing-scoped-public-packages
-  - https://www.w3schools.com/nodejs/nodejs_publish_package.asp
-  - https://dev.to/martinpersson/create-and-publish-your-first-npm-package-a-comprehensive-guide-3l0a
-- design more comprehensive test?
+## Get Started
+
+```typescript
+import { rateLimiter, RateLimiter, FixedWindowCounter } from '@ambergristle/hono-rate-limiter';
+
+const globalGetLimiter = rateLimiter({
+  limiter: new RateLimiter({
+    client,
+    algorithm: (store) => new FixedWindowCounter(store, {
+      maxUnits: 100,
+      windowSeconds: 60,
+    }),
+  }),
+  cost: 1,
+  generateKey: (c) => getConnInfo(c).remote.address,
+});
+
+const app = new Hono();
+
+app.use('*', async (c, next) => {
+  if (c.req.method === 'GET') {
+    await globalGetLimiter(c, next);
+  }
+
+  await next();
+});
+
+app.get('/', (c) => c.text('Rate limited!'));
+```
+
+### Generate identifiers from Context variables
+
+```typescript
+rateLimiter<{
+  Variables: {
+    user: { userId: string };
+  }
+}>({
+  // ...
+  generateKey: (c) => c.var.user.userId,
+});
+```
+
+### Initialize limiter from Context
+
+```typescript
+rateLimiter<{
+  Variables: {
+    client: Redis;
+  }
+}>({
+  // ...
+  limiter: (c) => {
+    return new RateLimiter({
+      client: c.var.client,
+      algorithm: (store) => new FixedWindowCounter(store, {
+        maxUnits: 100,
+        windowSeconds: 60,
+      }),
+    });
+  },
+});
+```
+
+## Roadmap
+
+- error enhancements; storage errors?
+
+#### format
+- naming
+- divide remaining by cost?
+
+#### research pk generation
+- should it be abstracted?
+- https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-08#section-5.1
+
+#### reset all
+
+#### deny list
+
+### Future
+
+#### safe load scripts
+- look into prehashing, should be ez
+- preload less likely scripts
+
+#### dynamic cost window log
+- doesn't obviously make sense, poses some serious technical challenges
+
+#### dynamic refunds
+- only required if limiter is untethered from middleware
 
 ## tests
 
@@ -44,31 +125,3 @@ algorithms
   - concurrent requests
   - multiple users (limits isolated per id)
   - configurable windows
-
-## Roadmap
-
-- error enhancements; storage errors?
-
-#### format
-- naming
-- divide remaining by cost?
-
-#### research pk generation
-- should it be abstracted?
-- https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-08#section-5.1
-
-#### reset all
-
-#### deny list
-
-### Future
-
-#### safe load scripts
-- look into prehashing, should be ez
-- preload less likely scripts
-
-#### dynamic cost window log
-- doesn't obviously make sense, poses some serious technical challenges
-
-#### dynamic refunds
-- only required if limiter is untethered from middleware
