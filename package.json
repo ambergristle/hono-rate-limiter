@@ -1,28 +1,29 @@
 {
 	"name": "@ambergristle/hono-rate-limiter",
-	"version": "0.0.1",
+	"version": "0.0.6",
 	"author": "ambergristle",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/ambergristle/hono-rate-limiter"
 	},
-	"main": "./dist/index.js",
-	"module": "",
+	"module": "dist/index.js",
+	"types": "dist/types/index.d.ts",
+	"files": ["dist"],
 	"devDependencies": {
 		"@types/bun": "^1.2.17",
 		"@upstash/redis": "^1.35.4",
-		"hono": "^4.9.9"
+		"hono": "^4.9.9",
+		"typescript": "^5.9.3"
 	},
 	"peerDependencies": {
-		"hono": ">= 4.7.4"
+		"hono": ">= 4.7.4",
+		"@upstash/redis": ">= 1.35"
 	},
 	"exports": {
 		".": "./dist/index.js",
 		"./algorithms": "./dist/algorithms/index.js"
 	},
 	"description": "Basic rate limiting for Hono, featuring a variety of algorithms",
-	"engines": {},
-	"files": [],
 	"funding": "https://github.com/sponsors/ambergristle",
 	"homepage": "https://github.com/ambergristle/hono-rate-limiter",
 	"keywords": [
@@ -48,7 +49,8 @@
 	"license": "MIT",
 	"private": false,
 	"scripts": {
-		"build": "bun build --entrypoints ./src/index.ts ./src/algorithms/index.ts --outdir ./dist --target=node",
+		"clean": "rm -rf dist",
+		"build": "bun run --shell bun clean && bun ./build/index.ts",
 		"test": "bun test ./src"
 	},
 	"type": "module"
