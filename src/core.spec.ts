@@ -3,7 +3,6 @@ import { Redis } from '@upstash/redis';
 import { type Context, Hono } from 'hono';
 import { FixedWindowCounter } from './algorithms/fixed-window/fixed-window-counter';
 import { rateLimiter } from './core';
-import { RateLimiter } from './limiter';
 import type { LimiterEnv } from './types';
 
 describe('middleware', () => {
@@ -16,13 +15,8 @@ describe('middleware', () => {
 
     test('requires key generator', async () => {
       const cb = () => rateLimiter({
-        limiter: new RateLimiter({
-          client,
-          algorithm: (store) => new FixedWindowCounter(store, {
-            maxUnits: 100,
-            windowSeconds: 60,
-          }),
-        }),
+        client,
+        algorithm: FixedWindowCounter.init(100, 60),
         cost: 0,
         generateKey: () => crypto.randomUUID(),
       });
@@ -32,13 +26,8 @@ describe('middleware', () => {
 
     test('returns middleware handler', () => {
       const cb = () => rateLimiter({
-        limiter: new RateLimiter({
-          client,
-          algorithm: (store) => new FixedWindowCounter(store, {
-            maxUnits: 100,
-            windowSeconds: 60,
-          })
-        }),
+        client,
+        algorithm: FixedWindowCounter.init(100, 60),
         generateKey: () => crypto.randomUUID(),
       });
 
@@ -68,13 +57,8 @@ describe('middleware', () => {
           await next();
         })
         .use('/', rateLimiter<AuthEnv>({
-          limiter: new RateLimiter({
-            client,
-            algorithm: (store) => new FixedWindowCounter(store, {
-              maxUnits: LIMIT,
-              windowSeconds: WINDOW,
-            })
-          }),
+          client,
+          algorithm: FixedWindowCounter.init(LIMIT, WINDOW),
           generateKey: (c) => c.var.user.userId,
         }))
         .get('/', (c) => c.body(null));

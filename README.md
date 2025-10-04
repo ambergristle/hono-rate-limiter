@@ -1,83 +1,98 @@
 
+## TL;DR
+
+A flexible rate limiting solution designed for Hono + (Upstash) Redis (for now), with four built-in algorithms.
+
+Modularity and interoperability are key goals. The `RateLimiter` can be used without the middleware, if you prefer to configure request handling yourself. I'll extend support to [`node-redis`](https://github.com/redis/node-redis) soon, and I'll look into implementing the algorithms using Cloudflare KV.
+
+The middleware was inspired by [`hono-rate-limiter`](https://github.com/rhinobase/hono-rate-limiter), and the algorithms are borrowed from [`@upstash/ratelimit-js](github.com/upstash/ratelimit-js) and [Lucia Auth](https://lucia-auth.com/rate-limit/token-bucket).
+
 ## Get Started
 
 ```typescript
-import { rateLimiter, RateLimiter, FixedWindowCounter } from '@ambergristle/hono-rate-limiter';
+import { Redis } from '@upstash/redis';
+import { rateLimiter } from '@ambergristle/hono-rate-limiter';
+import { FixedWindowCounter } from '@ambergristle/hono-rate-limiter/algorithms';
 
 const globalGetLimiter = rateLimiter({
-  limiter: new RateLimiter({
-    client,
-    algorithm: (store) => new FixedWindowCounter(store, {
-      maxUnits: 100,
-      windowSeconds: 60,
-    }),
-  }),
-  cost: 1,
-  generateKey: (c) => getConnInfo(c).remote.address,
+  client: Redis.fromEnv(), // don't forget to set env variables!
+  algorithm: FixedWindowCounter.init(100, 60),
+  cost: (c) => c.req.method === 'GET' ? 1 : 3,
+  generateKey:  getConnInfo(c).remote.address,
 });
 
-const app = new Hono();
+const app = new Hono()
+  .use('*', globalGetLimiter)
+  .get('/', (c) => c.text('Rate limited!'));
 
-app.use('*', async (c, next) => {
-  if (c.req.method === 'GET') {
-    await globalGetLimiter(c, next);
-  }
-
-  await next();
-});
-
-app.get('/', (c) => c.text('Rate limited!'));
+export default app;
 ```
 
 ### Generate identifiers from Context variables
 
 ```typescript
-rateLimiter<{
+type AuthEnv = {
   Variables: {
     user: { userId: string };
   }
-}>({
+}
+
+const userLimiter = rateLimiter<AuthEnv>({
   // ...
   generateKey: (c) => c.var.user.userId,
 });
+
+
 ```
 
 ### Initialize limiter from Context
 
 ```typescript
-rateLimiter<{
+type RedisEnv = {
   Variables: {
     client: Redis;
   }
-}>({
+}
+
+rateLimiter<RedisEnv>({
+  client: (c) => c.var.client,
   // ...
-  limiter: (c) => {
-    return new RateLimiter({
-      client: c.var.client,
-      algorithm: (store) => new FixedWindowCounter(store, {
-        maxUnits: 100,
-        windowSeconds: 60,
-      }),
-    });
-  },
+});
+```
+
+### Make sure cache is persisted beyond requests
+
+```typescript
+const blockedCache = new Map<string, number>();
+
+rateLimiter<RedisEnv>({
+  // ...
+  blockedCache,
 });
 ```
 
 ## Roadmap
 
-- error enhancements; storage errors?
+#### clear blocked cache
+
+#### improve tests
+- optimise test design
+- add algorithm-specific tests
+- add performance testing
+
+#### reset all
+- should this exist at the `RateLimiter` level?
+- make sure to only clear policy-specific limits
+
+#### deny list
+- allow identifiers? to be blacklisted
+
+#### improve errors
+- distinguish between different error types?
 
 #### format
 - naming
 - divide remaining by cost?
-
-#### research pk generation
-- should it be abstracted?
-- https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-08#section-5.1
-
-#### reset all
-
-#### deny list
 
 ### Future
 
