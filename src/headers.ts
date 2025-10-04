@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { HeaderSpec, LimiterEnv, RateLimitResult } from './types';
+import type { HeaderSpec, LimiterEnv, MaybePromise, RateLimitResult } from './types';
 import { LimiterError } from './errors';
 
 /**
@@ -89,13 +89,18 @@ export const updateInfoHeaders = async (
   });
 }
 
-const specs = {
+const specs: {
+  [key in HeaderSpec]: {
+    policy: (info: RateLimitResult) => MaybePromise<string>;
+    info: (info: RateLimitResult) => [string, string][];
+  }
+} = {
   /**
    * @see https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-06
    */
   'draft-6': {
-    policy: (info: RateLimitResult) => `${info.maxUnits};w=${info.windowSeconds}`,
-    info: (info: RateLimitResult) => [
+    policy: (info) => `${info.maxUnits};w=${info.windowSeconds}`,
+    info: (info) => [
       ['RateLimit-Limit', info.maxUnits.toString()],
       ['RateLimit-Remaining', info.remainingUnits.toString()],
       ['RateLimit-Reset', info.resetInSeconds.toString()]
@@ -105,8 +110,8 @@ const specs = {
    * @see https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-07
    */
   'draft-7': {
-    policy: (info: RateLimitResult) => `${info.maxUnits};w=${info.windowSeconds}`,
-    info: (info: RateLimitResult) => [
+    policy: (info) => `${info.maxUnits};w=${info.windowSeconds}`,
+    info: (info) => [
       ['RateLimit', `limit=${info.maxUnits}, remaining=${info.remainingUnits}, reset=${info.resetInSeconds}`],
     ],
   },
@@ -114,13 +119,13 @@ const specs = {
    * @see https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers-08
    */
   'draft-8': {
-    policy: async (info: RateLimitResult) => {
+    policy: async (info) => {
       // ends in==?
       const partitionKey = await getPartitionKey(info.identifier);
       const policy = `q=${info.maxUnits};w=${info.windowSeconds};pk=:${partitionKey}:`;
       return `"${info.policyName}";${policy}`;
     },
-    info: (info: RateLimitResult) => {
+    info: (info) => {
       const header = `r=${info.remainingUnits};t=${info.resetInSeconds}`;
       return [
         ['RateLimit', `"${info.policyName}";${header}`],

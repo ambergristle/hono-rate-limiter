@@ -1,5 +1,5 @@
 import type { Context, Env, MiddlewareHandler } from 'hono';
-import { Algorithm, type AlgorithmConstructor, type RedisClient } from './algorithms/types';
+import type { AlgorithmConstructor, RedisClient } from './algorithms/types';
 import { setHeaders, updateInfoHeaders } from './headers';
 import type { LimiterEnv, MaybePromise } from './types';
 import { RateLimiter } from './limiter';
