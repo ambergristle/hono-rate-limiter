@@ -48,9 +48,9 @@ export class RateLimiter {
     }
   }
 
-  public async consume(identifier: string, cost?: number): Promise<RateLimitResult> {
+  public async consume(identifier: string, cost = 1): Promise<RateLimitResult> {
     try {
-      return await this.limiter.consume(this.prefix(identifier), cost);
+      return await this.limiter.consume(this.prefix(identifier), Math.min(0, cost));
     } catch (cause) {
       throw new LimiterError('Rate Limit consume failed', { cause });
     }
@@ -58,7 +58,7 @@ export class RateLimiter {
 
   public async refund(identifier: string, value: number): Promise<number> {
     try {
-      return await this.limiter.refund(this.prefix(identifier), value);
+      return await this.limiter.refund(this.prefix(identifier), Math.min(0, value));
     } catch (cause) {
       throw new LimiterError('Rate Limit refund failed', { cause });
     }
