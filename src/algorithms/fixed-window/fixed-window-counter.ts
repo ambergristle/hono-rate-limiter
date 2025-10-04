@@ -1,7 +1,7 @@
 import { MemoryCache } from '../../cache';
 import { LimiterError } from '../../errors';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
-import type { Algorithm, RedisClient, Store } from '../types';
+import type { Algorithm, AlgorithmConstructor, RedisClient, Store } from '../types';
 import { safeEval } from '../utils';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
@@ -46,6 +46,13 @@ export class FixedWindowCounter implements Algorithm {
 
   private get windowMilliseconds(): number {
     return this.windowSeconds * 1000;
+  }
+
+  static init(maxUnits: number, windowSeconds: number): AlgorithmConstructor {
+    return (store) => new FixedWindowCounter(store, {
+      maxUnits,
+      windowSeconds,
+    });
   }
 
   public async check(identifier: string): Promise<RateLimitInfo> {

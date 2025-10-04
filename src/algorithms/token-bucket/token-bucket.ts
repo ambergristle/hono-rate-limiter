@@ -1,7 +1,7 @@
 import { MemoryCache } from '../../cache';
 import { LimiterError } from '../../errors';
 import type { RateLimitInfo, RateLimitResult } from '../../types';
-import type { Algorithm, RedisClient, Store } from '../types';
+import type { Algorithm, AlgorithmConstructor, RedisClient, Store } from '../types';
 import { safeEval } from '../utils';
 import incrementScript from './scripts/increment.lua' with { type: "text" };
 import refundScript from './scripts/refund.lua' with { type: "text" };
@@ -56,6 +56,14 @@ export class TokenBucket implements Algorithm {
 
   private get intervalMilliseconds(): number {
     return this.intervalSeconds * 1000;
+  }
+
+  static init(maxUnits: number, intervalSeconds: number, refillRate = 1): AlgorithmConstructor {
+    return (store) => new TokenBucket(store, {
+      maxUnits,
+      intervalSeconds,
+      refillRate,
+    });
   }
 
   public async check(identifier: string): Promise<RateLimitInfo> {
