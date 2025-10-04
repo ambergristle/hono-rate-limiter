@@ -1,4 +1,3 @@
-
 # secrets
 .env
 .env.*
@@ -9,11 +8,15 @@
 # dependencies
 node_modules/
 
-# build
-dist
-
 # development
 future/
+src/
+build/
+scripts/
+tests/
+*.test.ts
+tsconfig.json
+.gitignore
 
 # cloudflare
 worker

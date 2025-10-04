@@ -1,13 +1,14 @@
 {
 	"name": "@ambergristle/hono-rate-limiter",
-	"version": "0.0.6",
+	"version": "0.0.9",
 	"author": "ambergristle",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/ambergristle/hono-rate-limiter"
 	},
+	"main": "dist/index.js",
 	"module": "dist/index.js",
-	"types": "dist/types/index.d.ts",
+	"types": "dist/index.d.ts",
 	"files": ["dist"],
 	"devDependencies": {
 		"@types/bun": "^1.2.17",
@@ -51,6 +52,7 @@
 	"scripts": {
 		"clean": "rm -rf dist",
 		"build": "bun run --shell bun clean && bun ./build/index.ts",
+		"something": "npm pack --dry-run",
 		"test": "bun test ./src"
 	},
 	"type": "module"
