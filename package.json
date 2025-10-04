@@ -1,16 +1,30 @@
 {
 	"name": "@ambergristle/hono-rate-limiter",
 	"version": "0.0.1",
-	"description": "Basic rate limiting for Hono, featuring a variety of algorithms",
 	"author": "ambergristle",
-	"private": false,
-	"license": "MIT",
-	"homepage": "https://github.com/ambergristle/hono-rate-limiter",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/ambergristle/hono-rate-limiter"
 	},
+	"main": "./dist/index.js",
+	"module": "",
+	"devDependencies": {
+		"@types/bun": "^1.2.17",
+		"@upstash/redis": "^1.35.4",
+		"hono": "^4.9.9"
+	},
+	"peerDependencies": {
+		"hono": ">= 4.7.4"
+	},
+	"exports": {
+		".": "./dist/index.js",
+		"./algorithms": "./dist/algorithms/index.js"
+	},
+	"description": "Basic rate limiting for Hono, featuring a variety of algorithms",
+	"engines": {},
+	"files": [],
 	"funding": "https://github.com/sponsors/ambergristle",
+	"homepage": "https://github.com/ambergristle/hono-rate-limiter",
 	"keywords": [
 		"hono",
 		"rate",
@@ -31,28 +45,12 @@
 		"brute-force",
 		"attack"
 	],
-	"type": "module",
-	"main": "/dist/index.js",
-	"exports": null,
-	"module": "",
-	"types": "",
-	"files": [],
-	"engines": {},
+	"license": "MIT",
+	"private": false,
 	"scripts": {
-		"build": "bun build ./src/index.ts --outdir ./dist --target=node",
-		"test": "bun test ./src",
-		"format": "echo \"Error: not implemented\" && exit 1",
-		"lint": "echo \"Error: not implemented\" && exit 1",
-		"prepare": "echo \"Error: not implemented\" && exit 1"
+		"build": "bun build --entrypoints ./src/index.ts ./src/algorithms/index.ts --outdir ./dist --target=node",
+		"test": "bun test ./src"
 	},
-	"peerDependencies": {
-		"hono": ">= 4.7.4"
-	},
-	"devDependencies": {
-		"@types/bun": "^1.2.17",
-		"hono": "^4.9.9"
-	},
-	"dependencies": {
-		"@upstash/redis": "^1.35.4"
-	}
+	"type": "module",
+	"types": ""
 }

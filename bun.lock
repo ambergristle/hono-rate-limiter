@@ -3,15 +3,13 @@
   "workspaces": {
     "": {
       "name": "hono-rate-limiter",
-      "dependencies": {
-        "@upstash/redis": "^1.35.4",
-      },
       "devDependencies": {
         "@types/bun": "^1.2.17",
+        "@upstash/redis": "^1.35.4",
         "hono": "^4.9.9",
       },
       "peerDependencies": {
-        "hono": "^4.9.9",
+        "hono": ">= 4.7.4",
       },
     },
   },
