@@ -6,7 +6,7 @@ import type { Store } from '../types';
 import { SlidingWindowCounter } from './sliding-window-counter';
 
 const WINDOW = 5;
-const LIMIT = 1;
+const LIMIT = 5;
 const COST = 1;
 
 describe('SlidingWindowCounter', () => {

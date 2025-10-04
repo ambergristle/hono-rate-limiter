@@ -6,7 +6,7 @@ import type { Store } from '../types';
 import { TokenBucket } from './token-bucket';
 
 const INTERVAL = 5;
-const LIMIT = 1;
+const LIMIT = 5;
 const COST = 1;
 
 describe('TokenBucket', () => {
