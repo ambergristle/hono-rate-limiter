@@ -50,7 +50,7 @@ export class RateLimiter {
 
   public async consume(identifier: string, cost = 1): Promise<RateLimitResult> {
     try {
-      return await this.limiter.consume(this.prefix(identifier), Math.min(0, cost));
+      return await this.limiter.consume(this.prefix(identifier), Math.max(0, cost));
     } catch (cause) {
       throw new LimiterError('Rate Limit consume failed', { cause });
     }

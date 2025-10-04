@@ -51,6 +51,5 @@
 		"build": "bun build --entrypoints ./src/index.ts ./src/algorithms/index.ts --outdir ./dist --target=node",
 		"test": "bun test ./src"
 	},
-	"type": "module",
-	"types": ""
+	"type": "module"
 }
