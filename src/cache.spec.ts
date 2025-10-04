@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { Redis } from "@upstash/redis";
 import { RateLimiter } from "./limiter";
 import { SlidingWindowCounter } from "./algorithms/sliding-window/sliding-window-counter";
+import { MemoryCache } from "./cache";
 
 describe('Cache', () => {
 
@@ -53,6 +54,15 @@ describe('Cache', () => {
       expect(key).toEndWith(identifier);
       expect(resetAt).toBeGreaterThan(Date.now());
     })
+  });
+
+  test('caps out at 1000', () => {
+    const cache = new MemoryCache();
+
+    for (let i = 0; i < 1500; i++) {
+      cache.blockUntil(crypto.randomUUID(), Date.now());
+      expect(cache.size).toBe(Math.min(1000, i + 1));
+    }
   });
 
 });
