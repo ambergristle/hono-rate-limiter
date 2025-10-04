@@ -71,34 +71,58 @@ rateLimiter<RedisEnv>({
 });
 ```
 
+### Configure response Headers and error Response
+
+```typescript
+rateLimiter<RedisEnv>({
+  // ...
+  headerSpec: 'draft-7', // 'draft-6' | 'draft-7' | 'draft-8'
+  refundFailedRequests: true,
+  errorResponse: (c) => {
+    return c.text('Slow down!', 420);
+  }
+});
+```
+
+### Customize key prefixing
+
+`{keyPrefix?}:{policyName}:{key}`
+
+```typescript
+rateLimiter<RedisEnv>({
+  // ...
+  keyPrefix: 'limit',
+  policyName: 'global',
+});
+```
+
 ## Roadmap
 
-#### clear blocked cache
-
-#### improve tests
-- optimise test design
-- add algorithm-specific tests
-- add performance testing
+#### improve tests, benchmarks
+- optimize test design to provide better coverage, use fewer resrouces
+- add coverage for algorithm-specific behaviors
+- add coverage/benchmarks for limiter performance
 
 #### reset all
+- should be able to clear redis policy-prefixed records
 - should this exist at the `RateLimiter` level?
-- make sure to only clear policy-specific limits
-
-#### deny list
-- allow identifiers? to be blacklisted
 
 #### improve errors
 - distinguish between different error types?
 
-#### format
-- naming
-- divide remaining by cost?
+### open questions
+- how should request cost be communicated to clients
+  - is it factored into 
 
 ### Future
 
+#### deny list
+- allow identifiers? to be blacklisted
+- use a reference list as a starting point?
+
 #### safe load scripts
-- look into prehashing, should be ez
-- preload less likely scripts
+- look into prehashing scripts, should be ez
+- add preloading for less-likely scripts, try to load if not found
 
 #### dynamic cost window log
 - doesn't obviously make sense, poses some serious technical challenges
