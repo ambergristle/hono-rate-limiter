@@ -18,7 +18,7 @@ const globalGetLimiter = rateLimiter({
   client: Redis.fromEnv(), // don't forget to set env variables!
   algorithm: FixedWindowCounter.init(100, 60),
   cost: (c) => c.req.method === 'GET' ? 1 : 3,
-  generateKey:  getConnInfo(c).remote.address,
+  generateKey: (c) => getConnInfo(c).remote.address,
 });
 
 const app = new Hono()
